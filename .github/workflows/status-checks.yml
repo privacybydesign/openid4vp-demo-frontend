@@ -1,0 +1,43 @@
+# Workflow to check whether changes to master fulfill all requirements.
+name: Status checks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  schedule:
+    # Run every monday on 9:00 in the morning (UTC).
+    - cron: "0 9 * * 1"
+  # Make it possible to trigger the checks manually.
+  workflow_dispatch:
+
+jobs:
+    build-docker-image:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Docker meta
+          id: meta
+          uses: docker/metadata-action@v5
+          with:
+            images: ghcr.io/${{ github.repository }}
+            tags: |
+              type=semver,pattern={{major}}.{{minor}}.{{patch}}
+              type=raw,value=edge
+
+        - name: Login to GitHub Container Registry
+          uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Build container
+          uses: docker/build-push-action@v5
+          with:
+            context: .
+            push: false
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}
