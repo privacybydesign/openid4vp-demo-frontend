@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './App.css'
+import { Editor } from '@monaco-editor/react'
 
 const request = {
   "type": "vp_token",
@@ -91,12 +92,14 @@ interface WalletResponse {
   vp_token: Map<string, string>,
 }
 
+
 function App() {
   const [frontendState, setFrontendState] = useState(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState(0)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
+  const [sessionRequest, setSessionRequest] = useState(JSON.stringify(request, null, 4));
 
-  const startSession = async () => {
+  const startSession = async (request: string) => {
     const response = await fetch(
       `${import.meta.env.VITE_API_URL}/ui/presentations`,
       {
@@ -104,7 +107,7 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(request),
+        body: request,
       }
     )
     const json = await response.json()
@@ -142,16 +145,36 @@ function App() {
   const reset = () => setFrontendState(FrontendState.Pending)
 
   return (
-    <>
+    <div className="w-screen h-screen flex items-center flex-col align-center">
       <h2 className="text-3xl">Yivi OpenID4VP Verifier</h2>
-      {frontendState == FrontendState.Pending && <button className="m-5" onClick={startSession}>Start Session</button>}
+      {frontendState == FrontendState.Pending &&
+        <div className="h-full w-full flex items-center flex-col">
+          <button className="m-5" onClick={() => startSession(sessionRequest)}>
+            Start Session
+          </button>
+          <Editor
+            height="100%"
+            width="100%"
+            defaultLanguage="json"
+            defaultValue={sessionRequest}
+            theme="vs-dark"
+            onChange={(value) => setSessionRequest(value ?? '')}
+            options={{
+              automaticLayout: true,
+              minimap: { enabled: false },
+              formatOnPaste: true,
+              formatOnType: true,
+            }}
+          />
+        </div>
+      }
       {frontendState == FrontendState.Polling && <button className="m-5" onClick={cancel}>Cancel</button>}
       {frontendState == FrontendState.Done &&
         <div>
           <WalletResponseView disclosures={walletResponse} />
           <button className="m-5" onClick={reset}>Reset</button>
         </div>}
-    </>
+    </div>
   )
 }
 
