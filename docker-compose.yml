@@ -1,0 +1,12 @@
+services:
+  custom_verifier_frontend:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - API_URL=https://localhost:8085
