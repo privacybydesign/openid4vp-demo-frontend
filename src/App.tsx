@@ -7,21 +7,6 @@ const request = {
   "dcql_query": {
     "credentials": [
       {
-        "id": "email",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": ["pbdf.sidn-pbdf.email"]
-        },
-        "claims": [
-          {
-            "path": ["email"]
-          },
-          {
-            "path": ["domain"]
-          }
-        ]
-      },
-      {
         "id": "mobilenumber",
         "format": "dc+sd-jwt",
         "meta": {
@@ -33,24 +18,7 @@ const request = {
           }
         ]
       },
-      // {
-      //     "id": "32f54163-7166-48f1-93d8-ff217bdb0655",
-      //     "format": "dc+sd-jwt",
-      //     "meta": {
-      //         "vct_values": ["pbdf.pbdf.linkedin"]
-      //     },
-      //     "claims": [
-      //         {
-      //             "path": ["fullname"]
-      //         }
-      //     ]
-      // }
     ],
-    "credential_sets": [
-      {
-        "options": [["email"], ["mobilenumber"]],
-      }
-    ]
   },
   "nonce": "nonce",
   "jar_mode": "by_reference",
