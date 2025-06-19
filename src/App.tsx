@@ -86,7 +86,7 @@ function App() {
     const transactionId = json["transaction_id"]
     const id = setInterval(() => {
       (async () => {
-        const result = await fetch(`http://localhost:8080/ui/presentations/${transactionId}`)
+        const result = await fetch(`${import.meta.env.VITE_API_URL}/ui/presentations/${transactionId}`)
 
         if (result.status == 200) {
           setFrontendState(FrontendState.Done)
