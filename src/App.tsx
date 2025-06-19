@@ -10,7 +10,7 @@ const request = {
         "id": "mobilenumber",
         "format": "dc+sd-jwt",
         "meta": {
-          "vct_values": ["pbdf.sidn-pbdf.mobilenumber"]
+          "vct_values": ["pbdf-staging.sidn-pbdf.mobilenumber"]
         },
         "claims": [
           {
