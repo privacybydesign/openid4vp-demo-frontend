@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './App.css'
 import { Editor } from '@monaco-editor/react'
+import QRCodeComponent from './QrCodeComponent'
 
 const request = {
   "type": "vp_token",
@@ -26,10 +27,14 @@ const request = {
   "issuer_chain": "-----BEGIN CERTIFICATE-----\nMIICITCCAcigAwIBAgIUJmW4EIKWApJzMrgBjkLi8AnO3f8wCgYIKoZIzj0EAwIw\nQTELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxIzAhBgNVBAMMGm9wZW5pZDR2\nYy5zdGFnaW5nLnlpdmkuYXBwMB4XDTI1MDYwMzA4MzQxNloXDTM1MDYwMTA4MzQx\nNlowQTELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxIzAhBgNVBAMMGm9wZW5p\nZDR2Yy5zdGFnaW5nLnlpdmkuYXBwMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\nSr7bMrDTDe+R/HI1wywYtEYr+DJa5HdTnI8dsjZer6grPyZ4vxTeOmdjU9wp0Wkz\nfONmyk8xsPePon4AhwCK+aOBnTCBmjAMBgNVHRMBAf8EAjAAMAsGA1UdDwQEAwIF\noDATBgNVHSUEDDAKBggrgQICAAABBzBJBgNVHREEQjBAhiJodHRwczovL29wZW5p\nZDR2Yy5zdGFnaW5nLnlpdmkuYXBwghpvcGVuaWQ0dmMuc3RhZ2luZy55aXZpLmFw\ncDAdBgNVHQ4EFgQUNFp/ITlrNmraTYMsN3jijYUmLXswCgYIKoZIzj0EAwIDRwAw\nRAIgYDuyJIVAY/2XEoxU1802ztuawBc618Ygyz39PinWrk0CIH2kc3A3LsnYDWun\n6PY2x495dIntuwQAXq9ThYjvtOCE\n-----END CERTIFICATE-----",
 }
 
-function openApp(data: any) {
+function createWalletLink(data: any): string {
   const params = new URLSearchParams(data)
   const customUrl = `eudi-openid4vp://?${params}`
-  window.location.href = customUrl
+  return customUrl
+}
+
+function openWallet(link: string) {
+  window.location.href = link
 }
 
 enum FrontendState {
@@ -66,6 +71,7 @@ function App() {
   const [pollingCallbackId, setPollingCallbackId] = useState(0)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
   const [sessionRequest, setSessionRequest] = useState(JSON.stringify(request, null, 4));
+  const [walletLink, setWalletLink] = useState("")
 
   const startSession = async (request: string) => {
     const response = await fetch(
@@ -80,7 +86,8 @@ function App() {
     )
     const json = await response.json()
     console.log(`response: ${json}`)
-    openApp(json)
+
+    setWalletLink(createWalletLink(json))
     setFrontendState(FrontendState.Polling)
 
     const transactionId = json["transaction_id"]
@@ -136,7 +143,13 @@ function App() {
           />
         </div>
       }
-      {frontendState == FrontendState.Polling && <button className="m-5" onClick={cancel}>Cancel</button>}
+      {frontendState == FrontendState.Polling && (
+        <div>
+          <button onClick={() => openWallet(walletLink)}>Open Yivi</button>
+          <QRCodeComponent text={walletLink}/>
+          <button className="m-5" onClick={cancel}>Cancel</button>
+        </div>
+      )}
       {frontendState == FrontendState.Done &&
         <div>
           <WalletResponseView disclosures={walletResponse} />
