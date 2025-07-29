@@ -9,4 +9,4 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=8080
-      - API_URL=https://localhost:8085
+      - API_URL=https://verifierapi.openid4vc.staging.yivi.app
