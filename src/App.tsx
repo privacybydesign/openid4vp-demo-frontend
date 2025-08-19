@@ -99,9 +99,9 @@ function App() {
           setFrontendState(FrontendState.Done)
           clearInterval(id)
           const response = await result.json()
-          const entries = new Map<string, string>(Object.entries(response["vp_token"]))
-          const parsed = Array.from(entries, ([_, value]) => {
-            return parseSdJwtVc(value)
+          const entries = new Map<string, string[]>(Object.entries(response["vp_token"]))
+          const parsed = Array.from(entries, ([_, sdjwts]) => {
+            return sdjwts.map(parseSdJwtVc).flat()
           })
           setWalletResponse(parsed)
         }
@@ -146,7 +146,7 @@ function App() {
       {frontendState == FrontendState.Polling && (
         <div>
           <button onClick={() => openWallet(walletLink)}>Open Yivi</button>
-          <QRCodeComponent text={walletLink}/>
+          <QRCodeComponent text={walletLink} />
           <button className="m-5" onClick={cancel}>Cancel</button>
         </div>
       )}
