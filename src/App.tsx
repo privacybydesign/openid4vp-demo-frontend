@@ -15,6 +15,7 @@ const request = {
         },
         "claims": [
           {
+            "id": "mn",
             "path": ["mobilenumber"]
           }
         ]
