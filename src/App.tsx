@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import { Editor } from '@monaco-editor/react'
 import QRCodeComponent from './QrCodeComponent'
+import DigitalCredentialsDemo from './DigitalCredentialsDemo'
 
 const request = {
   "type": "vp_token",
@@ -38,11 +39,13 @@ function openWallet(link: string) {
   window.location.href = link
 }
 
-enum FrontendState {
-  Pending,
-  Polling,
-  Done,
-}
+const FrontendState = {
+  Pending: 'Pending',
+  Polling: 'Polling',
+  Done: 'Done',
+} as const
+
+type FrontendState = typeof FrontendState[keyof typeof FrontendState]
 
 interface DisclosureContent {
   key: string;
@@ -62,14 +65,17 @@ function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   })
 }
 
-interface WalletResponse {
-  vp_token: Map<string, string>,
-}
+const DemoTab = {
+  QRCode: 'QRCode',
+  DigitalCredentials: 'DigitalCredentials',
+} as const
 
+type DemoTab = typeof DemoTab[keyof typeof DemoTab]
 
 function App() {
-  const [frontendState, setFrontendState] = useState(FrontendState.Pending)
-  const [pollingCallbackId, setPollingCallbackId] = useState(0)
+  const [activeTab, setActiveTab] = useState<DemoTab>(DemoTab.QRCode)
+  const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
+  const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | null>(null)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
   const [sessionRequest, setSessionRequest] = useState(JSON.stringify(request, null, 4));
   const [walletLink, setWalletLink] = useState("")
@@ -115,47 +121,80 @@ function App() {
 
   const cancel = () => {
     setFrontendState(FrontendState.Pending)
-    clearInterval(pollingCallbackId)
+    if (pollingCallbackId) {
+      clearInterval(pollingCallbackId)
+    }
   }
 
   const reset = () => setFrontendState(FrontendState.Pending)
 
   return (
-    <div className="w-screen h-screen flex items-center flex-col align-center">
-      <h2 className="text-3xl">Yivi OpenID4VP Verifier</h2>
-      {frontendState == FrontendState.Pending &&
-        <div className="h-full w-full flex items-center flex-col">
-          <button className="m-5" onClick={() => startSession(sessionRequest)}>
-            Start Session
+    <div className="w-screen h-screen flex flex-col">
+      <div className="border-b border-gray-200">
+        <nav className="flex space-x-4 px-6" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab(DemoTab.QRCode)}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === DemoTab.QRCode
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            QR Code Demo
           </button>
-          <Editor
-            height="100%"
-            width="100%"
-            defaultLanguage="json"
-            defaultValue={sessionRequest}
-            theme="vs-dark"
-            onChange={(value) => setSessionRequest(value ?? '')}
-            options={{
-              automaticLayout: true,
-              minimap: { enabled: false },
-              formatOnPaste: true,
-              formatOnType: true,
-            }}
-          />
-        </div>
-      }
-      {frontendState == FrontendState.Polling && (
-        <div>
-          <button onClick={() => openWallet(walletLink)}>Open Yivi</button>
-          <QRCodeComponent text={walletLink} />
-          <button className="m-5" onClick={cancel}>Cancel</button>
+          <button
+            onClick={() => setActiveTab(DemoTab.DigitalCredentials)}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === DemoTab.DigitalCredentials
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Digital Credentials API Demo
+          </button>
+        </nav>
+      </div>
+
+      {activeTab === DemoTab.QRCode && (
+        <div className="flex-1 flex items-center flex-col align-center">
+          <h2 className="text-3xl mt-4">Yivi OpenID4VP Verifier</h2>
+          {frontendState == FrontendState.Pending &&
+            <div className="h-full w-full flex items-center flex-col">
+              <button className="m-5" onClick={() => startSession(sessionRequest)}>
+                Start Session
+              </button>
+              <Editor
+                height="100%"
+                width="100%"
+                defaultLanguage="json"
+                defaultValue={sessionRequest}
+                theme="vs-dark"
+                onChange={(value) => setSessionRequest(value ?? '')}
+                options={{
+                  automaticLayout: true,
+                  minimap: { enabled: false },
+                  formatOnPaste: true,
+                  formatOnType: true,
+                }}
+              />
+            </div>
+          }
+          {frontendState == FrontendState.Polling && (
+            <div>
+              <button onClick={() => openWallet(walletLink)}>Open Yivi</button>
+              <QRCodeComponent text={walletLink} />
+              <button className="m-5" onClick={cancel}>Cancel</button>
+            </div>
+          )}
+          {frontendState == FrontendState.Done &&
+            <div>
+              <WalletResponseView disclosures={walletResponse} />
+              <button className="m-5" onClick={reset}>Reset</button>
+            </div>}
         </div>
       )}
-      {frontendState == FrontendState.Done &&
-        <div>
-          <WalletResponseView disclosures={walletResponse} />
-          <button className="m-5" onClick={reset}>Reset</button>
-        </div>}
+
+      {activeTab === DemoTab.DigitalCredentials && <DigitalCredentialsDemo />}
     </div>
   )
 }
