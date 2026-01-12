@@ -65,10 +65,18 @@ function DigitalCredentialsDemo() {
     setError("")
 
     try {
-      // Check if Digital Credentials API is available
-      if (!('IdentityCredential' in window)) {
-        throw new Error('Digital Credentials API is not supported in this browser. This API requires Chrome 128+ on Android.')
+      // Check if Credential Management API is available
+      if (!navigator.credentials) {
+        throw new Error('Credential Management API is not supported in this browser.')
       }
+
+      // Additional checks for Digital Credentials API support
+      console.log('Browser capabilities:', {
+        hasCredentials: !!navigator.credentials,
+        hasIdentityCredential: 'IdentityCredential' in window,
+        userAgent: navigator.userAgent,
+        isAndroid: /Android/i.test(navigator.userAgent),
+      })
 
       // Start the OpenID4VP session with the verifier
       const response = await fetch(
@@ -89,33 +97,47 @@ function DigitalCredentialsDemo() {
       const sessionData = await response.json()
       console.log('Session started:', sessionData)
 
+      // Parse the session request to get the actual DCQL query
+      const requestBody = JSON.parse(sessionRequest)
+      console.log('Request body:', requestBody)
+
       // Create the Digital Credentials API request
-      // The wallet will receive the openid4vp:// URL via Android Credential Manager
-      const params = new URLSearchParams(sessionData)
-      const openid4vpUrl = `openid4vp://?${params}`
-
-      const digitalCredentialRequest = {
-        protocol: 'openid4vp',
-        request: openid4vpUrl
-      }
-
-      console.log('Requesting digital credential:', digitalCredentialRequest)
-
-      // Request the credential using the Digital Credentials API
+      // The data object should contain the actual OpenID4VP request parameters
       // @ts-ignore - Digital Credentials API types not yet in TypeScript
-      const credential = await navigator.identity.get({
+      const credentialRequestOptions = {
         digital: {
-          providers: [{
-            protocol: 'openid4vp',
-            request: JSON.stringify(digitalCredentialRequest)
+          requests: [{
+            protocol: "openid4vp-v1-unsigned",
+            data: {
+              client_id: sessionData.client_id,
+              request_uri: sessionData.request_uri,
+              request_uri_method: sessionData.request_uri_method || "get",
+              // Include the full request parameters that the backend generated
+              ...sessionData
+            }
           }]
         }
-      })
+      }
+
+      console.log('Credential request options:', credentialRequestOptions)
+
+      // @ts-ignore - Digital Credentials API types not yet in TypeScript
+      const credential = await navigator.credentials.get(credentialRequestOptions)
 
       console.log('Received credential:', credential)
 
-      // The credential.data contains the vp_token response
-      const credentialData = JSON.parse(credential.data)
+      if (!credential) {
+        throw new Error('No credential returned from wallet')
+      }
+
+      // The credential.data contains the vp_token response as a JSON string
+      // @ts-ignore - Digital Credentials API types not yet in TypeScript
+      const responseJson = credential.data
+      console.log('Raw credential data:', responseJson)
+
+      const credentialData = typeof responseJson === 'string'
+        ? JSON.parse(responseJson)
+        : responseJson
       setResponseData(credentialData)
 
       // Parse and display the response
@@ -130,7 +152,19 @@ function DigitalCredentialsDemo() {
       setDemoState(DemoState.Success)
     } catch (err: any) {
       console.error('Error requesting credential:', err)
-      setError(err.message || 'Unknown error occurred')
+
+      let errorMessage = err.message || 'Unknown error occurred'
+
+      // Add helpful context for common errors
+      if (errorMessage.includes('digital')) {
+        errorMessage += '\n\nNote: The Digital Credentials API requires:\n' +
+          '- Chrome 128+ on Android\n' +
+          '- HTTPS or localhost\n' +
+          '- The chrome://flags/#digital-credentials flag enabled\n' +
+          '- A compatible wallet app installed (Yivi app with Digital Credentials support)'
+      }
+
+      setError(errorMessage)
       setDemoState(DemoState.Error)
     }
   }
@@ -147,8 +181,14 @@ function DigitalCredentialsDemo() {
       <h2 className="text-3xl">Digital Credentials API Demo</h2>
       <p className="text-sm text-gray-600 max-w-2xl text-center mt-2">
         This demo uses the Android Digital Credentials API to request credentials from the Yivi wallet.
-        Requires Chrome 128+ on Android.
       </p>
+      <div className="text-xs text-gray-500 max-w-2xl text-center mt-2 bg-yellow-50 border border-yellow-200 rounded p-2">
+        <strong>Requirements:</strong><br />
+        • Chrome 128+ on Android device<br />
+        • Enable chrome://flags/#digital-credentials<br />
+        • Yivi app installed with Digital Credentials support<br />
+        • Served over HTTPS (or localhost for testing)
+      </div>
 
       {demoState === DemoState.Ready && (
         <div className="h-full w-full flex items-center flex-col">
