@@ -213,7 +213,7 @@ function DigitalCredentialsDemo() {
       {demoState === DemoState.Ready && (
         <div className="h-full w-full flex items-center flex-col">
           <button
-            className="m-5 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            className="m-5"
             onClick={requestCredential}
           >
             Request Credential via Digital Credentials API
@@ -274,7 +274,7 @@ function DigitalCredentialsDemo() {
           </div>
 
           <button
-            className="m-5 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            className="m-5"
             onClick={reset}
           >
             Start New Request
@@ -290,7 +290,7 @@ function DigitalCredentialsDemo() {
             <span className="block sm:inline">{error}</span>
           </div>
           <button
-            className="mt-5 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            className="mt-5"
             onClick={reset}
           >
             Try Again
