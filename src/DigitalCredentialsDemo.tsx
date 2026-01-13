@@ -65,18 +65,26 @@ function DigitalCredentialsDemo() {
     setError("")
 
     try {
-      // Check if Credential Management API is available
-      if (!navigator.credentials) {
-        throw new Error('Credential Management API is not supported in this browser.')
-      }
-
-      // Additional checks for Digital Credentials API support
+      // Log detailed browser capabilities for debugging
       console.log('Browser capabilities:', {
-        hasCredentials: !!navigator.credentials,
-        hasIdentityCredential: 'IdentityCredential' in window,
+        hasNavigator: typeof navigator !== 'undefined',
+        hasCredentials: typeof navigator.credentials !== 'undefined',
+        credentialsType: typeof navigator.credentials,
+        hasIdentityCredential: typeof window !== 'undefined' && 'IdentityCredential' in window,
+        hasPublicKeyCredential: typeof window !== 'undefined' && 'PublicKeyCredential' in window,
         userAgent: navigator.userAgent,
         isAndroid: /Android/i.test(navigator.userAgent),
+        isMobile: /Mobile/i.test(navigator.userAgent),
+        protocol: window.location.protocol,
+        hostname: window.location.hostname,
       })
+
+      // Check if Credential Management API is available
+      // Try to access it even if the check fails, as some browsers might have it
+      if (typeof navigator.credentials === 'undefined') {
+        console.warn('navigator.credentials is undefined - attempting anyway for testing')
+        // Don't throw error yet, try the API call anyway
+      }
 
       // Start the OpenID4VP session with the verifier
       const response = await fetch(
@@ -107,7 +115,7 @@ function DigitalCredentialsDemo() {
       const credentialRequestOptions = {
         digital: {
           requests: [{
-            protocol: "openid4vp-v1-unsigned",
+            protocol: "openid4vp",
             data: {
               client_id: sessionData.client_id,
               request_uri: sessionData.request_uri,
@@ -120,6 +128,18 @@ function DigitalCredentialsDemo() {
       }
 
       console.log('Credential request options:', credentialRequestOptions)
+
+      // Final check before making the API call
+      if (!navigator.credentials || typeof navigator.credentials.get !== 'function') {
+        throw new Error(
+          'navigator.credentials.get is not available. ' +
+          'Make sure you:\n' +
+          '1. Are using Chrome 128+ on Android\n' +
+          '2. Have enabled chrome://flags/#digital-credentials\n' +
+          '3. Have completely restarted Chrome after enabling the flag\n' +
+          '4. Are accessing via HTTPS or localhost'
+        )
+      }
 
       // @ts-ignore - Digital Credentials API types not yet in TypeScript
       const credential = await navigator.credentials.get(credentialRequestOptions)
