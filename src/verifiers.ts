@@ -245,6 +245,29 @@ const eudiPresets: Preset[] = [
     }),
   },
   {
+    label: "Email + optional phone",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "email",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.email"] },
+          claims: [{ path: ["email"] }],
+        },
+        {
+          id: "mobilenumber",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.mobilenumber"] },
+          claims: [{ path: ["mobilenumber"] }],
+        },
+      ],
+      credential_sets: [
+        { options: [["email"]] },
+        { options: [["mobilenumber"]], required: false },
+      ],
+    }),
+  },
+  {
     label: "Age check (over18)",
     request: eudiRequest({
       credentials: [
@@ -253,6 +276,55 @@ const eudiPresets: Preset[] = [
           format: "dc+sd-jwt",
           meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
           claims: [{ path: ["over18"] }],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Dutch nationality (predefined value)",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "passport",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
+          claims: [
+            { path: ["firstName"] },
+            { path: ["lastName"] },
+            { path: ["nationality"], values: ["Dutch"] },
+          ],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Over 18 = Yes (predefined value)",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "passport",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
+          claims: [
+            { path: ["over18"], values: ["Yes"] },
+          ],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Male or Female (predefined values)",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "passport",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
+          claims: [
+            { path: ["firstName"] },
+            { path: ["lastName"] },
+            { path: ["gender"], values: ["M", "F"] },
+          ],
         },
       ],
     }),
@@ -418,6 +490,44 @@ const irmaPresets: Preset[] = [
         ["irma-demo.RU.studentCard.studentID"],
       ],
       [["irma-demo.MijnOverheid.fullName.firstname", "irma-demo.MijnOverheid.fullName.familyname"]],
+    ]),
+  },
+  {
+    label: "Name + optional BSN",
+    request: irmaRequest([
+      [["irma-demo.MijnOverheid.fullName.firstname", "irma-demo.MijnOverheid.fullName.familyname"]],
+      [
+        [],
+        ["irma-demo.MijnOverheid.root.BSN"],
+      ],
+    ]),
+  },
+  {
+    label: "University = Radboud (predefined value)",
+    request: irmaRequest([
+      [[
+        { type: "irma-demo.RU.studentCard.university", value: "Radboud University" },
+        "irma-demo.RU.studentCard.level",
+      ]],
+    ]),
+  },
+  {
+    label: "Student level = PhD (predefined value)",
+    request: irmaRequest([
+      [[
+        "irma-demo.RU.studentCard.university",
+        { type: "irma-demo.RU.studentCard.level", value: "PhD" },
+      ]],
+    ]),
+  },
+  {
+    label: "Name with prefix (predefined value)",
+    request: irmaRequest([
+      [[
+        "irma-demo.MijnOverheid.fullName.firstname",
+        "irma-demo.MijnOverheid.fullName.familyname",
+        { type: "irma-demo.MijnOverheid.fullName.prefix", value: "van" },
+      ]],
     ]),
   },
 ]
