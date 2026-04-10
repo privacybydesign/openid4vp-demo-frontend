@@ -8,14 +8,14 @@ interface TabBarProps {
 
 export default function TabBar({ verifiers, activeTab, onSwitch }: TabBarProps) {
   return (
-    <div className="flex border-b border-gray-300 mt-4 mb-4">
+    <div className="flex w-full border-b border-[#CFE4EF] mb-5">
       {verifiers.map((v) => (
         <button
           key={v.tab}
-          className={`px-6 py-2 font-medium ${
+          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors bg-transparent rounded-none ${
             activeTab === v.tab
-              ? "border-b-2 border-blue-500 text-blue-600"
-              : "text-gray-500 hover:text-gray-700"
+              ? "border-[#E12747] text-[#E12747]"
+              : "border-transparent text-[#484747] hover:text-[#E12747]"
           }`}
           onClick={() => onSwitch(v.tab)}
         >

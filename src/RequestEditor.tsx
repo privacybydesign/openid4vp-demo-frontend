@@ -4,6 +4,7 @@ import { json } from "@codemirror/lang-json"
 import { catppuccinLatte } from "@catppuccin/codemirror"
 import { EditorState } from "@codemirror/state"
 import type { Preset, VerifierTab } from "./verifiers"
+import compactJson from "./compactJson"
 
 interface RequestEditorProps {
   activeTab: VerifierTab
@@ -42,7 +43,7 @@ export default function RequestEditor({ activeTab, defaultValue, presets, onChan
   }, [activeTab])
 
   const selectPreset = (index: number) => {
-    const text = JSON.stringify(presets![index].request, null, 4)
+    const text = compactJson(presets![index].request)
     onChange(text)
     const view = viewRef.current
     if (view) {
@@ -53,11 +54,14 @@ export default function RequestEditor({ activeTab, defaultValue, presets, onChan
   }
 
   return (
-    <div className="h-full w-full flex items-center flex-col">
-      <div className="flex items-center gap-3 m-5">
+    <div className="flex-1 w-full flex flex-col overflow-hidden">
+      <div className="flex items-center gap-3 mb-4">
+        <button className="btn-primary" onClick={onStart}>
+          Start Session
+        </button>
         {presets && (
           <select
-            className="border border-gray-300 rounded px-3 py-1.5"
+            className="border border-[#CFE4EF] rounded-md px-4 py-[0.65rem] text-[16px] font-semibold text-[#484747] bg-white focus:outline-none focus:border-[#00508a]"
             onChange={(e) => selectPreset(Number(e.target.value))}
             defaultValue=""
           >
@@ -71,9 +75,11 @@ export default function RequestEditor({ activeTab, defaultValue, presets, onChan
             ))}
           </select>
         )}
-        <button onClick={onStart}>Start Session</button>
       </div>
-      <div ref={editorRef} className="h-full w-full overflow-auto" />
+      <div
+        ref={editorRef}
+        className="flex-1 overflow-auto rounded-lg border border-[#CFE4EF] bg-white"
+      />
     </div>
   )
 }

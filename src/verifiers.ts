@@ -466,4 +466,4 @@ export const irmaVerifier: Verifier = {
   },
 }
 
-export const verifiers: Verifier[] = [eudiVerifier, veramoVerifier, irmaVerifier]
+export const verifiers: Verifier[] = [irmaVerifier, eudiVerifier, veramoVerifier]

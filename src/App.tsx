@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import "./App.css"
 import { verifiers } from "./verifiers"
 import type { DisclosureContent, VerifierTab, SessionResult } from "./verifiers"
+import compactJson from "./compactJson"
 import TabBar from "./TabBar"
 import RequestEditor from "./RequestEditor"
 import SessionPoller from "./SessionPoller"
@@ -14,7 +15,7 @@ enum FrontendState {
 }
 
 function defaultRequestForTab(tab: VerifierTab): string {
-  return JSON.stringify(verifiers.find((v) => v.tab === tab)!.defaultRequest, null, 4)
+  return compactJson(verifiers.find((v) => v.tab === tab)!.defaultRequest)
 }
 
 const allTabs = verifiers.map((v) => v.tab)
@@ -23,7 +24,7 @@ function readStateFromUrl(): { tab: VerifierTab; requestPerTab: Record<VerifierT
   const params = new URLSearchParams(window.location.search)
 
   const tabParam = params.get("tab")
-  const tab: VerifierTab = allTabs.includes(tabParam as VerifierTab) ? (tabParam as VerifierTab) : "eudi"
+  const tab: VerifierTab = allTabs.includes(tabParam as VerifierTab) ? (tabParam as VerifierTab) : "irma"
 
   const defaults = Object.fromEntries(allTabs.map((t) => [t, defaultRequestForTab(t)])) as Record<VerifierTab, string>
 
@@ -85,14 +86,12 @@ function App() {
   const startSession = async () => {
     const session: SessionResult = await verifier.startSession(requestPerTab[activeTab])
 
-    // Managed session (e.g. yivi-popup): result is already available
     if (session.disclosures) {
       setWalletResponse(session.disclosures)
       setFrontendState(FrontendState.Done)
       return
     }
 
-    // Manual session (EUDI, Veramo): show QR and poll
     setWalletLink(session.walletLink!)
     setFrontendState(FrontendState.Polling)
 
@@ -116,28 +115,33 @@ function App() {
   const reset = () => setFrontendState(FrontendState.Pending)
 
   return (
-    <div className="w-screen h-screen flex items-center flex-col align-center">
-      <h2 className="text-3xl">Yivi Verifier</h2>
+    <div className="h-full flex flex-col">
+      <header className="bg-white border-b border-[#CFE4EF] flex items-center px-4 py-4 gap-4">
+        <img src="/yivi-logo.svg" alt="Yivi" className="h-10" />
+        <h1 className="text-lg font-bold text-[#484747] m-0">Verifier Tool</h1>
+      </header>
 
-      <TabBar verifiers={verifiers} activeTab={activeTab} onSwitch={switchTab} />
+      <div className="flex-1 flex flex-col items-center w-full px-6 py-6 overflow-hidden">
+        <TabBar verifiers={verifiers} activeTab={activeTab} onSwitch={switchTab} />
 
-      {frontendState === FrontendState.Pending && (
-        <RequestEditor
-          activeTab={activeTab}
-          defaultValue={requestPerTab[activeTab]}
-          presets={verifier.presets}
-          onChange={changeRequest}
-          onStart={startSession}
-        />
-      )}
+        {frontendState === FrontendState.Pending && (
+          <RequestEditor
+            activeTab={activeTab}
+            defaultValue={requestPerTab[activeTab]}
+            presets={verifier.presets}
+            onChange={changeRequest}
+            onStart={startSession}
+          />
+        )}
 
-      {frontendState === FrontendState.Polling && (
-        <SessionPoller walletLink={walletLink} onCancel={cancel} />
-      )}
+        {frontendState === FrontendState.Polling && (
+          <SessionPoller walletLink={walletLink} onCancel={cancel} />
+        )}
 
-      {frontendState === FrontendState.Done && (
-        <WalletResponseView disclosures={walletResponse} onReset={reset} />
-      )}
+        {frontendState === FrontendState.Done && (
+          <WalletResponseView disclosures={walletResponse} onReset={reset} />
+        )}
+      </div>
     </div>
   )
 }
