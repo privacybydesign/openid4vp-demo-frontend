@@ -17,16 +17,15 @@ function defaultRequestForTab(tab: VerifierTab): string {
   return JSON.stringify(verifiers.find((v) => v.tab === tab)!.defaultRequest, null, 4)
 }
 
+const allTabs = verifiers.map((v) => v.tab)
+
 function readStateFromUrl(): { tab: VerifierTab; requestPerTab: Record<VerifierTab, string> } {
   const params = new URLSearchParams(window.location.search)
 
   const tabParam = params.get("tab")
-  const tab: VerifierTab = tabParam === "veramo" ? "veramo" : "eudi"
+  const tab: VerifierTab = allTabs.includes(tabParam as VerifierTab) ? (tabParam as VerifierTab) : "eudi"
 
-  const defaults: Record<VerifierTab, string> = {
-    eudi: defaultRequestForTab("eudi"),
-    veramo: defaultRequestForTab("veramo"),
-  }
+  const defaults = Object.fromEntries(allTabs.map((t) => [t, defaultRequestForTab(t)])) as Record<VerifierTab, string>
 
   const requestParam = params.get("request")
   if (requestParam) {
@@ -85,11 +84,20 @@ function App() {
 
   const startSession = async () => {
     const session: SessionResult = await verifier.startSession(requestPerTab[activeTab])
-    setWalletLink(session.walletLink)
+
+    // Managed session (e.g. yivi-popup): result is already available
+    if (session.disclosures) {
+      setWalletResponse(session.disclosures)
+      setFrontendState(FrontendState.Done)
+      return
+    }
+
+    // Manual session (EUDI, Veramo): show QR and poll
+    setWalletLink(session.walletLink!)
     setFrontendState(FrontendState.Polling)
 
     const id = setInterval(async () => {
-      const result = await session.poll()
+      const result = await session.poll!()
       if (result) {
         clearInterval(id)
         setWalletResponse(result)
@@ -109,7 +117,7 @@ function App() {
 
   return (
     <div className="w-screen h-screen flex items-center flex-col align-center">
-      <h2 className="text-3xl">Yivi OpenID4VP Verifier</h2>
+      <h2 className="text-3xl">Yivi Verifier</h2>
 
       <TabBar verifiers={verifiers} activeTab={activeTab} onSwitch={switchTab} />
 

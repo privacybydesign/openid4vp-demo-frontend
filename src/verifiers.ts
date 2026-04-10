@@ -1,14 +1,19 @@
+import { newPopup } from "@privacybydesign/yivi-frontend"
+
 export interface DisclosureContent {
   key: string
   value: string
 }
 
 export interface SessionResult {
-  walletLink: string
-  poll: () => Promise<DisclosureContent[][] | null>
+  // For verifiers with manual QR/polling (EUDI, Veramo)
+  walletLink?: string
+  poll?: () => Promise<DisclosureContent[][] | null>
+  // For verifiers where the UI is managed externally (IRMA/yivi-popup)
+  disclosures?: DisclosureContent[][]
 }
 
-export type VerifierTab = "eudi" | "veramo"
+export type VerifierTab = "eudi" | "veramo" | "irma"
 
 export interface Preset {
   label: string
@@ -32,6 +37,10 @@ function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
     return { key: res[1], value: res[2] }
   })
 }
+
+// ---------------------------------------------------------------------------
+// EUDI verifier
+// ---------------------------------------------------------------------------
 
 const ISSUER_CHAIN =
   "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----"
@@ -195,6 +204,47 @@ const eudiPresets: Preset[] = [
     }),
   },
   {
+    label: "Contact + Name",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "email",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.email"] },
+          claims: [{ path: ["email"] }],
+        },
+        {
+          id: "mobilenumber",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.mobilenumber"] },
+          claims: [{ path: ["mobilenumber"] }],
+        },
+        {
+          id: "passport",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
+          claims: [{ path: ["firstName"] }, { path: ["lastName"] }],
+        },
+        {
+          id: "idcard",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.idcard"] },
+          claims: [{ path: ["firstName"] }, { path: ["lastName"] }],
+        },
+        {
+          id: "drivinglicence",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.drivinglicence"] },
+          claims: [{ path: ["firstName"] }, { path: ["lastName"] }],
+        },
+      ],
+      credential_sets: [
+        { options: [["email"], ["mobilenumber"]] },
+        { options: [["passport"], ["idcard"], ["drivinglicence"]] },
+      ],
+    }),
+  },
+  {
     label: "Age check (over18)",
     request: eudiRequest({
       credentials: [
@@ -239,6 +289,10 @@ export const eudiVerifier: Verifier = {
     }
   },
 }
+
+// ---------------------------------------------------------------------------
+// Veramo verifier
+// ---------------------------------------------------------------------------
 
 const VERAMO_API_URL = import.meta.env.VITE_VERAMO_API_URL ?? "https://veramo-verifier.openid4vc.staging.yivi.app"
 const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-verifier"
@@ -297,4 +351,119 @@ export const veramoVerifier: Verifier = {
   },
 }
 
-export const verifiers: Verifier[] = [eudiVerifier, veramoVerifier]
+// ---------------------------------------------------------------------------
+// IRMA verifier (uses yivi-frontend-packages popup)
+// ---------------------------------------------------------------------------
+
+const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL ?? "https://is.openid4vc.staging.yivi.app"
+
+function irmaRequest(disclose: any): object {
+  return {
+    "@context": "https://irma.app/ld/request/disclosure/v2",
+    disclose,
+  }
+}
+
+const irmaPresets: Preset[] = [
+  {
+    label: "Full name",
+    request: irmaRequest([
+      [["irma-demo.MijnOverheid.fullName.firstname", "irma-demo.MijnOverheid.fullName.familyname"]],
+    ]),
+  },
+  {
+    label: "BSN",
+    request: irmaRequest([
+      [["irma-demo.MijnOverheid.root.BSN"]],
+    ]),
+  },
+  {
+    label: "Student Card",
+    request: irmaRequest([
+      [[
+        "irma-demo.RU.studentCard.university",
+        "irma-demo.RU.studentCard.level",
+        "irma-demo.RU.studentCard.studentID",
+      ]],
+    ]),
+  },
+  {
+    label: "Name OR Student Card (choice)",
+    request: irmaRequest([
+      [
+        ["irma-demo.MijnOverheid.fullName.firstname", "irma-demo.MijnOverheid.fullName.familyname"],
+        ["irma-demo.RU.studentCard.university", "irma-demo.RU.studentCard.level"],
+      ],
+    ]),
+  },
+  {
+    label: "BSN + Name (multi-credential)",
+    request: irmaRequest([
+      [["irma-demo.MijnOverheid.root.BSN"]],
+      [["irma-demo.MijnOverheid.fullName.firstname", "irma-demo.MijnOverheid.fullName.familyname"]],
+    ]),
+  },
+  {
+    label: "BSN + Student Card",
+    request: irmaRequest([
+      [["irma-demo.MijnOverheid.root.BSN"]],
+      [["irma-demo.RU.studentCard.university", "irma-demo.RU.studentCard.studentID"]],
+    ]),
+  },
+  {
+    label: "(BSN OR Student ID) + Name",
+    request: irmaRequest([
+      [
+        ["irma-demo.MijnOverheid.root.BSN"],
+        ["irma-demo.RU.studentCard.studentID"],
+      ],
+      [["irma-demo.MijnOverheid.fullName.firstname", "irma-demo.MijnOverheid.fullName.familyname"]],
+    ]),
+  },
+]
+
+function parseIrmaResult(result: any): DisclosureContent[][] {
+  if (!result?.disclosed) return []
+  return result.disclosed.map((discon: any[]) =>
+    discon.map((attr: any) => ({
+      key: attr.id.split(".").pop() ?? attr.id,
+      value: attr.rawvalue ?? attr.value?.[""] ?? String(attr.value),
+    }))
+  )
+}
+
+export const irmaVerifier: Verifier = {
+  tab: "irma",
+  label: "IRMA",
+  defaultRequest: irmaPresets[0].request,
+  presets: irmaPresets,
+  startSession: async (request: string) => {
+    const parsedRequest = JSON.parse(request)
+
+    const popup = newPopup({
+      debugging: false,
+      session: {
+        url: IRMA_SERVER_URL,
+        start: {
+          url: (o: any) => `${o.url}/session`,
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parsedRequest),
+        },
+        mapping: {
+          sessionPtr: (r: any) => r.sessionPtr,
+          sessionToken: (r: any) => r.token,
+        },
+        result: {
+          url: (o: any, { sessionToken }: any) => `${o.url}/session/${sessionToken}/result`,
+          method: "GET",
+        },
+      },
+    })
+
+    const result = await popup.start()
+    return { disclosures: parseIrmaResult(result) }
+  },
+}
+
+export const verifiers: Verifier[] = [eudiVerifier, veramoVerifier, irmaVerifier]

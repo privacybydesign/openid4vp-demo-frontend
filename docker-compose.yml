@@ -13,3 +13,4 @@ services:
       - VERAMO_API_URL=https://veramo-verifier.openid4vc.staging.yivi.app
       - VERAMO_VERIFIER_NAME=test-verifier
       - VERAMO_ADMIN_TOKEN=test-verifier-admin-token
+      - IRMA_SERVER_URL=https://is.demo.staging.yivi.app

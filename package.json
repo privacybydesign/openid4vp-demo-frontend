@@ -12,6 +12,7 @@
   "dependencies": {
     "@catppuccin/codemirror": "^1.0.3",
     "@codemirror/lang-json": "^6.0.2",
+    "@privacybydesign/yivi-frontend": "^1.0.0-beta.4",
     "@tailwindcss/vite": "^4.1.7",
     "codemirror": "^6.0.2",
     "qrcode": "^1.5.4",
