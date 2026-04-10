@@ -1,4 +1,8 @@
-import { Editor } from "@monaco-editor/react"
+import { useEffect, useRef } from "react"
+import { EditorView, basicSetup } from "codemirror"
+import { json } from "@codemirror/lang-json"
+import { catppuccinLatte } from "@catppuccin/codemirror"
+import { EditorState } from "@codemirror/state"
 import type { Preset, VerifierTab } from "./verifiers"
 
 interface RequestEditorProps {
@@ -10,9 +14,42 @@ interface RequestEditorProps {
 }
 
 export default function RequestEditor({ activeTab, defaultValue, presets, onChange, onStart }: RequestEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView>()
+
+  useEffect(() => {
+    if (!editorRef.current) return
+
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: defaultValue,
+        extensions: [
+          basicSetup,
+          json(),
+          catppuccinLatte,
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              onChange(update.state.doc.toString())
+            }
+          }),
+        ],
+      }),
+      parent: editorRef.current,
+    })
+    viewRef.current = view
+
+    return () => view.destroy()
+  }, [activeTab])
+
   const selectPreset = (index: number) => {
-    const json = JSON.stringify(presets![index].request, null, 4)
-    onChange(json)
+    const text = JSON.stringify(presets![index].request, null, 4)
+    onChange(text)
+    const view = viewRef.current
+    if (view) {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: text },
+      })
+    }
   }
 
   return (
@@ -36,21 +73,7 @@ export default function RequestEditor({ activeTab, defaultValue, presets, onChan
         )}
         <button onClick={onStart}>Start Session</button>
       </div>
-      <Editor
-        key={activeTab + defaultValue}
-        height="100%"
-        width="100%"
-        defaultLanguage="json"
-        defaultValue={defaultValue}
-        theme="vs-dark"
-        onChange={(value) => onChange(value ?? "")}
-        options={{
-          automaticLayout: true,
-          minimap: { enabled: false },
-          formatOnPaste: true,
-          formatOnType: true,
-        }}
-      />
+      <div ref={editorRef} className="h-full w-full overflow-auto" />
     </div>
   )
 }
