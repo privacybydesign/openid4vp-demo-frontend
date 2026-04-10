@@ -8,7 +8,7 @@ interface WalletResponseViewProps {
 export default function WalletResponseView({ disclosures, onReset }: WalletResponseViewProps) {
   const discs = disclosures.flat()
   return (
-    <div className="flex flex-col items-center gap-6 mt-4 w-full">
+    <div className="flex flex-col items-center gap-6 mt-4 w-full max-w-md mx-auto">
       <div className="bg-[#00973a] text-white px-4 py-3 rounded-md text-sm font-semibold w-full">
         Disclosure successful
       </div>
@@ -30,8 +30,8 @@ export default function WalletResponseView({ disclosures, onReset }: WalletRespo
           </tbody>
         </table>
       </div>
-      <button className="btn-secondary" onClick={onReset}>
-        New session
+      <button className="btn-secondary w-full" onClick={onReset}>
+        Go back
       </button>
     </div>
   )

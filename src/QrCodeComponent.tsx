@@ -11,7 +11,7 @@ const QRCodeComponent = ({ text }: QRCodeComponentProps) => {
 
   useEffect(() => {
     if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, text, { width: 200 }, (error: any) => {
+      QRCode.toCanvas(canvasRef.current, text, { width: 300 }, (error: any) => {
         if (error) console.error(error);
       });
     }

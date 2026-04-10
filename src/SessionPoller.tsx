@@ -9,14 +9,12 @@ export default function SessionPoller({ walletLink, onCancel }: SessionPollerPro
   return (
     <div className="flex flex-col items-center gap-6 mt-4">
       <p className="text-sm text-[#484747]">Scan the QR code with the Yivi app or tap the button below.</p>
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-[#CFE4EF]">
+      <div className="flex flex-col gap-3 bg-white p-4 rounded-lg shadow-sm border border-[#CFE4EF]">
         <QRCodeComponent text={walletLink} />
-      </div>
-      <div className="flex gap-3">
-        <button className="btn-primary" onClick={() => (window.location.href = walletLink)}>
+        <button className="btn-primary w-full" onClick={() => (window.location.href = walletLink)}>
           Open Yivi
         </button>
-        <button className="btn-secondary" onClick={onCancel}>
+        <button className="btn-secondary w-full" onClick={onCancel}>
           Cancel
         </button>
       </div>
