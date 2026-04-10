@@ -1,42 +1,12 @@
-import { useState } from 'react'
-import './App.css'
-import { Editor } from '@monaco-editor/react'
-import QRCodeComponent from './QrCodeComponent'
-
-const request = {
-  "type": "vp_token",
-  "dcql_query": {
-    "credentials": [
-      {
-        "id": "mobilenumber",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": ["pbdf-staging.sidn-pbdf.mobilenumber"]
-        },
-        "claims": [
-          {
-            "id": "mn",
-            "path": ["mobilenumber"]
-          }
-        ]
-      },
-    ],
-  },
-  "nonce": "nonce",
-  "jar_mode": "by_reference",
-  "request_uri_method": "post",
-  "issuer_chain": "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----",
-}
-
-function createWalletLink(data: any): string {
-  const params = new URLSearchParams(data)
-  const customUrl = `eudi-openid4vp://?${params}`
-  return customUrl
-}
-
-function openWallet(link: string) {
-  window.location.href = link
-}
+import { useCallback, useEffect, useState } from "react"
+import "./App.css"
+import { verifiers } from "./verifiers"
+import type { DisclosureContent, VerifierTab, SessionResult } from "./verifiers"
+import compactJson from "./compactJson"
+import TabBar from "./TabBar"
+import RequestEditor from "./RequestEditor"
+import SessionPoller from "./SessionPoller"
+import WalletResponseView from "./WalletResponseView"
 
 enum FrontendState {
   Pending,
@@ -44,140 +14,136 @@ enum FrontendState {
   Done,
 }
 
-interface DisclosureContent {
-  key: string;
-  value: string;
+function defaultRequestForTab(tab: VerifierTab): string {
+  return compactJson(verifiers.find((v) => v.tab === tab)!.defaultRequest)
 }
 
-function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
-  const components = sdjwt.split("~")
-  const disclosures = (components.slice(1, components.length - 1).map((value) => {
-    return atob(value)
-  }) as string[])
+const allTabs = verifiers.map((v) => v.tab)
 
+function readStateFromUrl(): { tab: VerifierTab; requestPerTab: Record<VerifierTab, string> } {
+  const params = new URLSearchParams(window.location.search)
 
-  return disclosures.map((value) => {
-    const res = JSON.parse(value) as string[]
-    return { key: res[1], value: res[2] }
-  })
+  const tabParam = params.get("tab")
+  const tab: VerifierTab = allTabs.includes(tabParam as VerifierTab) ? (tabParam as VerifierTab) : "irma"
+
+  const defaults = Object.fromEntries(allTabs.map((t) => [t, defaultRequestForTab(t)])) as Record<VerifierTab, string>
+
+  const requestParam = params.get("request")
+  if (requestParam) {
+    try {
+      defaults[tab] = atob(requestParam)
+    } catch { /* ignore invalid base64 */ }
+  }
+
+  return { tab, requestPerTab: defaults }
 }
 
-interface WalletResponse {
-  vp_token: Map<string, string>,
-}
+function writeStateToUrl(tab: VerifierTab, request: string) {
+  const params = new URLSearchParams()
+  params.set("tab", tab)
 
+  const isDefault = request === defaultRequestForTab(tab)
+  if (!isDefault) {
+    params.set("request", btoa(request))
+  }
+
+  window.history.replaceState(null, "", `?${params}`)
+}
 
 function App() {
+  const initial = readStateFromUrl()
+  const [activeTab, setActiveTab] = useState<VerifierTab>(initial.tab)
   const [frontendState, setFrontendState] = useState(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState(0)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
-  const [sessionRequest, setSessionRequest] = useState(JSON.stringify(request, null, 4));
   const [walletLink, setWalletLink] = useState("")
+  const [requestPerTab, setRequestPerTab] = useState(initial.requestPerTab)
 
-  const startSession = async (request: string) => {
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/ui/presentations`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: request,
-      }
-    )
-    const json = await response.json()
-    console.log(`response: ${json}`)
+  const verifier = verifiers.find((v) => v.tab === activeTab)!
 
-    setWalletLink(createWalletLink(json))
+  const updateUrl = useCallback(
+    (tab: VerifierTab, requests: Record<VerifierTab, string>) => {
+      writeStateToUrl(tab, requests[tab])
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (frontendState === FrontendState.Pending) {
+      updateUrl(activeTab, requestPerTab)
+    }
+  }, [activeTab, requestPerTab, frontendState, updateUrl])
+
+  const switchTab = (tab: VerifierTab) => {
+    if (frontendState !== FrontendState.Pending) return
+    setActiveTab(tab)
+  }
+
+  const changeRequest = (value: string) => {
+    setRequestPerTab((prev) => ({ ...prev, [activeTab]: value }))
+  }
+
+  const startSession = async () => {
+    const session: SessionResult = await verifier.startSession(requestPerTab[activeTab])
+
+    if (session.disclosures) {
+      setWalletResponse(session.disclosures)
+      setFrontendState(FrontendState.Done)
+      return
+    }
+
+    setWalletLink(session.walletLink!)
     setFrontendState(FrontendState.Polling)
 
-    const transactionId = json["transaction_id"]
-    const id = setInterval(() => {
-      (async () => {
-        const result = await fetch(`${import.meta.env.VITE_API_URL}/ui/presentations/${transactionId}`)
-
-        if (result.status == 200) {
-          setFrontendState(FrontendState.Done)
-          clearInterval(id)
-          const response = await result.json()
-          const entries = new Map<string, string[]>(Object.entries(response["vp_token"]))
-          const parsed = Array.from(entries, ([_, sdjwts]) => {
-            return sdjwts.map(parseSdJwtVc).flat()
-          })
-          setWalletResponse(parsed)
-        }
-      })()
-
+    const id = setInterval(async () => {
+      const result = await session.poll!()
+      if (result) {
+        clearInterval(id)
+        setWalletResponse(result)
+        setFrontendState(FrontendState.Done)
+      }
     }, 500)
 
     setPollingCallbackId(id)
   }
 
   const cancel = () => {
-    setFrontendState(FrontendState.Pending)
     clearInterval(pollingCallbackId)
+    setFrontendState(FrontendState.Pending)
   }
 
   const reset = () => setFrontendState(FrontendState.Pending)
 
   return (
-    <div className="w-screen h-screen flex items-center flex-col align-center">
-      <h2 className="text-3xl">Yivi OpenID4VP Verifier</h2>
-      {frontendState == FrontendState.Pending &&
-        <div className="h-full w-full flex items-center flex-col">
-          <button className="m-5" onClick={() => startSession(sessionRequest)}>
-            Start Session
-          </button>
-          <Editor
-            height="100%"
-            width="100%"
-            defaultLanguage="json"
-            defaultValue={sessionRequest}
-            theme="vs-dark"
-            onChange={(value) => setSessionRequest(value ?? '')}
-            options={{
-              automaticLayout: true,
-              minimap: { enabled: false },
-              formatOnPaste: true,
-              formatOnType: true,
-            }}
+    <div className="h-full flex flex-col">
+      <header className="bg-white border-b border-[#CFE4EF] flex items-center px-4 py-4 gap-4">
+        <img src="/yivi-logo.svg" alt="Yivi" className="h-10" />
+        <h1 className="text-lg font-bold text-[#484747] m-0">Verifier Tool</h1>
+      </header>
+
+      <div className="flex-1 flex flex-col items-center w-full px-6 py-6 overflow-hidden">
+        <TabBar verifiers={verifiers} activeTab={activeTab} onSwitch={switchTab} />
+
+        {frontendState === FrontendState.Pending && (
+          <RequestEditor
+            activeTab={activeTab}
+            defaultValue={requestPerTab[activeTab]}
+            presets={verifier.presets}
+            onChange={changeRequest}
+            onStart={startSession}
           />
-        </div>
-      }
-      {frontendState == FrontendState.Polling && (
-        <div>
-          <button onClick={() => openWallet(walletLink)}>Open Yivi</button>
-          <QRCodeComponent text={walletLink} />
-          <button className="m-5" onClick={cancel}>Cancel</button>
-        </div>
-      )}
-      {frontendState == FrontendState.Done &&
-        <div>
-          <WalletResponseView disclosures={walletResponse} />
-          <button className="m-5" onClick={reset}>Reset</button>
-        </div>}
+        )}
+
+        {frontendState === FrontendState.Polling && (
+          <SessionPoller walletLink={walletLink} onCancel={cancel} />
+        )}
+
+        {frontendState === FrontendState.Done && (
+          <WalletResponseView disclosures={walletResponse} onReset={reset} />
+        )}
+      </div>
     </div>
   )
-}
-
-interface WalletResponseViewProps {
-  disclosures: DisclosureContent[][]
-}
-
-const WalletResponseView = (disclosures: WalletResponseViewProps) => {
-  const discs = disclosures.disclosures.flat()
-  return (
-    <div className="max-w-md mx-auto mt-6 border border-gray-200 rounded-md shadow-sm">
-      <dl className="divide-y divide-gray-200">
-        {discs.map(({ key, value }) => (
-          <div key={key} className="flex justify-between px-4 py-3 bg-white">
-            <dt className="text-gray-600 font-medium">{key}</dt>
-            <dd className="text-gray-900">{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
 }
 
 export default App
