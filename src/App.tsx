@@ -117,6 +117,7 @@ function App() {
         <RequestEditor
           activeTab={activeTab}
           defaultValue={requestPerTab[activeTab]}
+          presets={verifier.presets}
           onChange={changeRequest}
           onStart={startSession}
         />

@@ -10,10 +10,16 @@ export interface SessionResult {
 
 export type VerifierTab = "eudi" | "veramo"
 
+export interface Preset {
+  label: string
+  request: object
+}
+
 export interface Verifier {
   tab: VerifierTab
   label: string
   defaultRequest: object
+  presets?: Preset[]
   startSession: (request: string) => Promise<SessionResult>
 }
 
@@ -27,34 +33,187 @@ function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   })
 }
 
-export const eudiVerifier: Verifier = {
-  tab: "eudi",
-  label: "EUDI",
-  defaultRequest: {
+const ISSUER_CHAIN =
+  "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----"
+
+function eudiRequest(dcql_query: object): object {
+  return {
     type: "vp_token",
-    dcql_query: {
+    dcql_query,
+    nonce: "nonce",
+    jar_mode: "by_reference",
+    request_uri_method: "post",
+    issuer_chain: ISSUER_CHAIN,
+  }
+}
+
+const eudiPresets: Preset[] = [
+  {
+    label: "Mobile number",
+    request: eudiRequest({
       credentials: [
         {
           id: "mobilenumber",
           format: "dc+sd-jwt",
-          meta: {
-            vct_values: ["pbdf-staging.sidn-pbdf.mobilenumber"],
-          },
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.mobilenumber"] },
+          claims: [{ path: ["mobilenumber"] }],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Email",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "email",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.email"] },
+          claims: [{ path: ["email"] }, { path: ["domain"] }],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Passport",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "passport",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
           claims: [
-            {
-              id: "mn",
-              path: ["mobilenumber"],
-            },
+            { path: ["firstName"] },
+            { path: ["lastName"] },
+            { path: ["dateOfBirth"] },
+            { path: ["nationality"] },
+            { path: ["gender"] },
+            { path: ["documentNumber"] },
+            { path: ["dateOfExpiry"] },
           ],
         },
       ],
-    },
-    nonce: "nonce",
-    jar_mode: "by_reference",
-    request_uri_method: "post",
-    issuer_chain:
-      "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----",
+    }),
   },
+  {
+    label: "ID Card",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "idcard",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.idcard"] },
+          claims: [
+            { path: ["firstName"] },
+            { path: ["lastName"] },
+            { path: ["dateOfBirth"] },
+            { path: ["nationality"] },
+            { path: ["gender"] },
+            { path: ["documentNumber"] },
+            { path: ["dateOfExpiry"] },
+          ],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Driving Licence",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "drivinglicence",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.drivinglicence"] },
+          claims: [
+            { path: ["firstName"] },
+            { path: ["lastName"] },
+            { path: ["dateOfBirth"] },
+            { path: ["documentNumber"] },
+            { path: ["dateOfExpiry"] },
+          ],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Email OR Mobile number (choice)",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "email",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.email"] },
+          claims: [{ path: ["email"] }],
+        },
+        {
+          id: "mobilenumber",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.mobilenumber"] },
+          claims: [{ path: ["mobilenumber"] }],
+        },
+      ],
+      credential_sets: [{ options: [["email"], ["mobilenumber"]] }],
+    }),
+  },
+  {
+    label: "Passport OR ID Card (choice)",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "passport",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
+          claims: [{ path: ["firstName"] }, { path: ["lastName"] }, { path: ["dateOfBirth"] }],
+        },
+        {
+          id: "idcard",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.idcard"] },
+          claims: [{ path: ["firstName"] }, { path: ["lastName"] }, { path: ["dateOfBirth"] }],
+        },
+      ],
+      credential_sets: [{ options: [["passport"], ["idcard"]] }],
+    }),
+  },
+  {
+    label: "ID + Email (multi-credential)",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "idcard",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.idcard"] },
+          claims: [{ path: ["firstName"] }, { path: ["lastName"] }],
+        },
+        {
+          id: "email",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.sidn-pbdf.email"] },
+          claims: [{ path: ["email"] }],
+        },
+      ],
+    }),
+  },
+  {
+    label: "Age check (over18)",
+    request: eudiRequest({
+      credentials: [
+        {
+          id: "passport",
+          format: "dc+sd-jwt",
+          meta: { vct_values: ["pbdf-staging.pbdf.passport"] },
+          claims: [{ path: ["over18"] }],
+        },
+      ],
+    }),
+  },
+]
+
+export const eudiVerifier: Verifier = {
+  tab: "eudi",
+  label: "EUDI",
+  defaultRequest: eudiPresets[0].request,
+  presets: eudiPresets,
   startSession: async (request: string) => {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/ui/presentations`, {
       method: "POST",
