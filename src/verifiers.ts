@@ -399,7 +399,7 @@ const veramoPresets: Preset[] = [
           {
             id: "eduid-credential",
             format: "dc+sd-jwt",
-            vct_values: ["https://issuer.dev.eduid.nl/vct/eduid"],
+            meta: { vct_values: ["https://issuer.dev.eduid.nl/vct/eduid"] },
             claims: [
               { path: ["given_name"] },
               { path: ["family_name"] },
