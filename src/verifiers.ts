@@ -370,20 +370,54 @@ const VERAMO_API_URL = import.meta.env.VITE_VERAMO_API_URL ?? "https://veramo-ve
 const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-verifier"
 const VERAMO_ADMIN_TOKEN = import.meta.env.VITE_VERAMO_ADMIN_TOKEN ?? "test-verifier-admin-token"
 
+const veramoPresets: Preset[] = [
+  {
+    label: "Test credential (given_name + email)",
+    request: {
+      dcql: {
+        credentials: [
+          {
+            id: "test-credential",
+            format: "dc+sd-jwt",
+            claims: [{ path: ["given_name"] }, { path: ["email"] }],
+          },
+        ],
+      },
+    },
+  },
+  {
+    label: "eduID (by presentation ID)",
+    request: {
+      presentationId: "eduid",
+    },
+  },
+  {
+    label: "eduID (inline DCQL)",
+    request: {
+      dcql: {
+        credentials: [
+          {
+            id: "eduid-credential",
+            format: "dc+sd-jwt",
+            vct_values: ["https://issuer.dev.eduid.nl/vct/eduid"],
+            claims: [
+              { path: ["given_name"] },
+              { path: ["family_name"] },
+              { path: ["email"] },
+              { path: ["schac_home_organization"] },
+            ],
+          },
+        ],
+      },
+    },
+  },
+]
+
 export const veramoVerifier: Verifier = {
   tab: "veramo",
   label: "Veramo",
-  defaultRequest: {
-    dcql: {
-      credentials: [
-        {
-          id: "test-credential",
-          format: "dc+sd-jwt",
-          claims: [{ path: ["given_name"] }, { path: ["email"] }],
-        },
-      ],
-    },
-  },
+  defaultRequest: veramoPresets[0].request,
+  presets: veramoPresets,
   startSession: async (request: string) => {
     const response = await fetch(`${VERAMO_API_URL}/${VERAMO_VERIFIER_NAME}/api/create-dcql-offer`, {
       method: "POST",
