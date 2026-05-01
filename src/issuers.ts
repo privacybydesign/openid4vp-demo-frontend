@@ -108,10 +108,13 @@ const presetOrder: PresetSpec[] = [
   { credentialId: "OrganizationCredentialSdJwt", label: "Organization Credential" },
 ]
 
+const ONE_YEAR_SECONDS = 31536000
+
 function offerRequest(credentialId: string, withTxCode: boolean): object {
   return {
     credentials: [credentialId],
     grants: withTxCode ? preAuthGrantWithTxCode : preAuthGrant,
+    credentialMetadata: { expiration: ONE_YEAR_SECONDS },
     credentialDataSupplierInput: credentialDataByCredential[credentialId],
   }
 }
