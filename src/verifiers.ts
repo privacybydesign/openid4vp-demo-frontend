@@ -1,32 +1,5 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
-
-export interface DisclosureContent {
-  key: string
-  value: string
-}
-
-export interface SessionResult {
-  // For verifiers with manual QR/polling (EUDI, Veramo)
-  walletLink?: string
-  poll?: () => Promise<DisclosureContent[][] | null>
-  // For verifiers where the UI is managed externally (IRMA/yivi-popup)
-  disclosures?: DisclosureContent[][]
-}
-
-export type VerifierTab = "eudi" | "veramo" | "irma"
-
-export interface Preset {
-  label: string
-  request: object
-}
-
-export interface Verifier {
-  tab: VerifierTab
-  label: string
-  defaultRequest: object
-  presets?: Preset[]
-  startSession: (request: string) => Promise<SessionResult>
-}
+import type { DisclosureContent, Preset, VerifierTabConfig } from "./tabs"
 
 function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   const components = sdjwt.split("~")
@@ -331,7 +304,8 @@ const eudiPresets: Preset[] = [
   },
 ]
 
-export const eudiVerifier: Verifier = {
+export const eudiVerifier: VerifierTabConfig = {
+  kind: "verifier",
   tab: "eudi",
   label: "EUDI",
   defaultRequest: eudiPresets[0].request,
@@ -368,54 +342,241 @@ export const eudiVerifier: Verifier = {
 
 const VERAMO_API_URL = import.meta.env.VITE_VERAMO_API_URL ?? "https://veramo-verifier.openid4vc.staging.yivi.app"
 const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-verifier"
-const VERAMO_ADMIN_TOKEN = import.meta.env.VITE_VERAMO_ADMIN_TOKEN ?? "test-verifier-admin-token"
+const VERAMO_ADMIN_TOKEN = import.meta.env.VITE_VERAMO_ADMIN_TOKEN ?? "veramo-verifier-admin-token"
+
+const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
+
+function veramoVct(name: string): string {
+  return `${VERAMO_ISSUER_BASE}/vct/${name}`
+}
+
+function veramoDcqlRequest(credential: object): object {
+  return { dcql: { credentials: [credential] } }
+}
 
 const veramoPresets: Preset[] = [
   {
-    label: "Test credential (given_name + email)",
-    request: {
-      dcql: {
-        credentials: [
-          {
-            id: "test-credential",
-            format: "dc+sd-jwt",
-            claims: [{ path: ["given_name"] }, { path: ["email"] }],
-          },
-        ],
-      },
-    },
+    label: "eduID (SURF)",
+    request: veramoDcqlRequest({
+      id: "eduid-credential",
+      format: "dc+sd-jwt",
+      meta: { vct_values: ["https://issuer.dev.eduid.nl/vct/eduid"] },
+      claims: [
+        { path: ["given_name"] },
+        { path: ["family_name"] },
+        { path: ["email"] },
+        { path: ["schac_home_organization"] },
+      ],
+    }),
+  },
+
+  // Email
+  {
+    label: "Email — address only",
+    request: veramoDcqlRequest({
+      id: "email",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("email")] },
+      claims: [{ path: ["email"] }],
+    }),
   },
   {
-    label: "eduID (by presentation ID)",
-    request: {
-      presentationId: "eduid",
-    },
+    label: "Email — full",
+    request: veramoDcqlRequest({
+      id: "email",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("email")] },
+      claims: [{ path: ["email"] }, { path: ["domain"] }],
+    }),
+  },
+
+  // Student Card
+  {
+    label: "Student Card — university + level (anonymous)",
+    request: veramoDcqlRequest({
+      id: "studentcard",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("studentcard")] },
+      claims: [{ path: ["university"] }, { path: ["level"] }],
+    }),
   },
   {
-    label: "eduID (inline DCQL)",
-    request: {
-      dcql: {
-        credentials: [
-          {
-            id: "eduid-credential",
-            format: "dc+sd-jwt",
-            meta: { vct_values: ["https://issuer.dev.eduid.nl/vct/eduid"] },
-            claims: [
-              { path: ["given_name"] },
-              { path: ["family_name"] },
-              { path: ["email"] },
-              { path: ["schac_home_organization"] },
-            ],
-          },
-        ],
-      },
-    },
+    label: "Student Card — student ID only",
+    request: veramoDcqlRequest({
+      id: "studentcard",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("studentcard")] },
+      claims: [{ path: ["student_id"] }],
+    }),
+  },
+  {
+    label: "Student Card — full",
+    request: veramoDcqlRequest({
+      id: "studentcard",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("studentcard")] },
+      claims: [
+        { path: ["university"] },
+        { path: ["level"] },
+        { path: ["student_id"] },
+        { path: ["courses"] },
+      ],
+    }),
+  },
+
+  // House
+  {
+    label: "House — country only (residence)",
+    request: veramoDcqlRequest({
+      id: "house",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("house")] },
+      claims: [{ path: ["address", "country"] }],
+    }),
+  },
+  {
+    label: "House — city + country",
+    request: veramoDcqlRequest({
+      id: "house",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("house")] },
+      claims: [{ path: ["address", "city"] }, { path: ["address", "country"] }],
+    }),
+  },
+  {
+    label: "House — full",
+    request: veramoDcqlRequest({
+      id: "house",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("house")] },
+      claims: [
+        { path: ["owner_name"] },
+        { path: ["address", "street"] },
+        { path: ["address", "city"] },
+        { path: ["address", "country"] },
+      ],
+    }),
+  },
+
+  // Membership
+  {
+    label: "Membership — type + since (anonymous status)",
+    request: veramoDcqlRequest({
+      id: "membership",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("membership")] },
+      claims: [{ path: ["membership_type"] }, { path: ["member_since"] }],
+    }),
+  },
+  {
+    label: "Membership — name + type",
+    request: veramoDcqlRequest({
+      id: "membership",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("membership")] },
+      claims: [{ path: ["member_name"] }, { path: ["membership_type"] }],
+    }),
+  },
+  {
+    label: "Membership — full",
+    request: veramoDcqlRequest({
+      id: "membership",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("membership")] },
+      claims: [
+        { path: ["member_name"] },
+        { path: ["member_since"] },
+        { path: ["membership_type"] },
+        { path: ["benefits"] },
+      ],
+    }),
+  },
+
+  // eduID (Veramo-issued)
+  {
+    label: "eduID (Veramo) — identity",
+    request: veramoDcqlRequest({
+      id: "eduid-veramo",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("eduid")] },
+      claims: [{ path: ["given_name"] }, { path: ["family_name"] }],
+    }),
+  },
+  {
+    label: "eduID (Veramo) — institution only",
+    request: veramoDcqlRequest({
+      id: "eduid-veramo",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("eduid")] },
+      claims: [{ path: ["schac_home_organization"] }],
+    }),
+  },
+  {
+    label: "eduID (Veramo) — full",
+    request: veramoDcqlRequest({
+      id: "eduid-veramo",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("eduid")] },
+      claims: [
+        { path: ["given_name"] },
+        { path: ["family_name"] },
+        { path: ["email"] },
+        { path: ["schac_home_organization"] },
+        { path: ["eduperson_scoped_affiliation"] },
+      ],
+    }),
+  },
+
+  // Organization (nested arrays)
+  {
+    label: "Organization — university name only",
+    request: veramoDcqlRequest({
+      id: "organization",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("organization")] },
+      claims: [{ path: ["name"] }],
+    }),
+  },
+  {
+    label: "Organization — faculty names",
+    request: veramoDcqlRequest({
+      id: "organization",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("organization")] },
+      claims: [{ path: ["faculties", null, "faculty_name"] }],
+    }),
+  },
+  {
+    label: "Organization — first course of first dept per faculty",
+    request: veramoDcqlRequest({
+      id: "organization",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("organization")] },
+      claims: [
+        { path: ["faculties", null, "faculty_name"] },
+        { path: ["faculties", null, "departments", 0, "courses", 0] },
+      ],
+    }),
+  },
+  {
+    label: "Organization — full",
+    request: veramoDcqlRequest({
+      id: "organization",
+      format: "dc+sd-jwt",
+      meta: { vct_values: [veramoVct("organization")] },
+      claims: [
+        { path: ["name"] },
+        { path: ["founded"] },
+        { path: ["faculties"] },
+      ],
+    }),
   },
 ]
 
-export const veramoVerifier: Verifier = {
-  tab: "veramo",
-  label: "Veramo",
+export const veramoVerifier: VerifierTabConfig = {
+  kind: "verifier",
+  tab: "veramo-verifier",
+  label: "Veramo Verifier",
   defaultRequest: veramoPresets[0].request,
   presets: veramoPresets,
   startSession: async (request: string) => {
@@ -576,7 +737,8 @@ function parseIrmaResult(result: any): DisclosureContent[][] {
   )
 }
 
-export const irmaVerifier: Verifier = {
+export const irmaVerifier: VerifierTabConfig = {
+  kind: "verifier",
   tab: "irma",
   label: "IRMA",
   defaultRequest: irmaPresets[0].request,
@@ -609,5 +771,3 @@ export const irmaVerifier: Verifier = {
     return { disclosures: parseIrmaResult(result) }
   },
 }
-
-export const verifiers: Verifier[] = [irmaVerifier, eudiVerifier, veramoVerifier]
