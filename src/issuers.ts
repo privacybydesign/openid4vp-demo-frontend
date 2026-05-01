@@ -69,28 +69,26 @@ const credentialDataByCredential: Record<string, object> = {
     "is_library-walk-in": false,
   },
   OrganizationCredentialSdJwt: {
-    university: {
-      name: "Radboud University",
-      founded: "1923",
-      faculties: [
-        {
-          faculty_name: "Faculty of Science",
-          departments: [
-            {
-              dept_name: "Computer Science",
-              courses: ["Cryptography", "Distributed Systems"],
-            },
-          ],
-        },
-        {
-          faculty_name: "Faculty of Arts",
-          departments: [
-            { dept_name: "History", courses: ["Medieval Europe", "Modern Asia"] },
-            { dept_name: "Linguistics", courses: ["Phonetics", "Syntax"] },
-          ],
-        },
-      ],
-    },
+    name: "Radboud University",
+    founded: "1923",
+    faculties: [
+      {
+        faculty_name: "Faculty of Science",
+        departments: [
+          {
+            dept_name: "Computer Science",
+            courses: ["Cryptography", "Distributed Systems"],
+          },
+        ],
+      },
+      {
+        faculty_name: "Faculty of Arts",
+        departments: [
+          { dept_name: "History", courses: ["Medieval Europe", "Modern Asia"] },
+          { dept_name: "Linguistics", courses: ["Phonetics", "Syntax"] },
+        ],
+      },
+    ],
   },
 }
 
