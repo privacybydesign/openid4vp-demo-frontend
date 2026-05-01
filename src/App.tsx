@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react"
 import "./App.css"
-import { verifiers } from "./verifiers"
-import type { DisclosureContent, VerifierTab, SessionResult } from "./verifiers"
+import { tabs } from "./tabs"
+import type { TabId, DisclosureContent, IssuanceComplete, VerifierSessionResult, IssuerSessionResult } from "./tabs"
 import compactJson from "./compactJson"
 import TabBar from "./TabBar"
 import RequestEditor from "./RequestEditor"
 import SessionPoller from "./SessionPoller"
 import WalletResponseView from "./WalletResponseView"
+import IssuerSessionPoller from "./IssuerSessionPoller"
+import IssuanceCompleteView from "./IssuanceCompleteView"
 
 enum FrontendState {
   Pending,
@@ -14,19 +16,19 @@ enum FrontendState {
   Done,
 }
 
-function defaultRequestForTab(tab: VerifierTab): string {
-  return compactJson(verifiers.find((v) => v.tab === tab)!.defaultRequest)
+function defaultRequestForTab(tab: TabId): string {
+  return compactJson(tabs.find((t) => t.tab === tab)!.defaultRequest)
 }
 
-const allTabs = verifiers.map((v) => v.tab)
+const allTabs = tabs.map((t) => t.tab)
 
-function readStateFromUrl(): { tab: VerifierTab; requestPerTab: Record<VerifierTab, string> } {
+function readStateFromUrl(): { tab: TabId; requestPerTab: Record<TabId, string> } {
   const params = new URLSearchParams(window.location.search)
 
   const tabParam = params.get("tab")
-  const tab: VerifierTab = allTabs.includes(tabParam as VerifierTab) ? (tabParam as VerifierTab) : "irma"
+  const tab: TabId = allTabs.includes(tabParam as TabId) ? (tabParam as TabId) : "irma"
 
-  const defaults = Object.fromEntries(allTabs.map((t) => [t, defaultRequestForTab(t)])) as Record<VerifierTab, string>
+  const defaults = Object.fromEntries(allTabs.map((t) => [t, defaultRequestForTab(t)])) as Record<TabId, string>
 
   const requestParam = params.get("request")
   if (requestParam) {
@@ -38,7 +40,7 @@ function readStateFromUrl(): { tab: VerifierTab; requestPerTab: Record<VerifierT
   return { tab, requestPerTab: defaults }
 }
 
-function writeStateToUrl(tab: VerifierTab, request: string) {
+function writeStateToUrl(tab: TabId, request: string) {
   const params = new URLSearchParams()
   params.set("tab", tab)
 
@@ -52,17 +54,19 @@ function writeStateToUrl(tab: VerifierTab, request: string) {
 
 function App() {
   const initial = readStateFromUrl()
-  const [activeTab, setActiveTab] = useState<VerifierTab>(initial.tab)
+  const [activeTab, setActiveTab] = useState<TabId>(initial.tab)
   const [frontendState, setFrontendState] = useState(FrontendState.Pending)
-  const [pollingCallbackId, setPollingCallbackId] = useState(0)
+  const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
+  const [issuanceResult, setIssuanceResult] = useState<IssuanceComplete | null>(null)
   const [walletLink, setWalletLink] = useState("")
+  const [txCode, setTxCode] = useState<string | undefined>(undefined)
   const [requestPerTab, setRequestPerTab] = useState(initial.requestPerTab)
 
-  const verifier = verifiers.find((v) => v.tab === activeTab)!
+  const tab = tabs.find((t) => t.tab === activeTab)!
 
   const updateUrl = useCallback(
-    (tab: VerifierTab, requests: Record<VerifierTab, string>) => {
+    (tab: TabId, requests: Record<TabId, string>) => {
       writeStateToUrl(tab, requests[tab])
     },
     []
@@ -74,18 +78,16 @@ function App() {
     }
   }, [activeTab, requestPerTab, frontendState, updateUrl])
 
-  const switchTab = (tab: VerifierTab) => {
+  const switchTab = (next: TabId) => {
     if (frontendState !== FrontendState.Pending) return
-    setActiveTab(tab)
+    setActiveTab(next)
   }
 
   const changeRequest = (value: string) => {
     setRequestPerTab((prev) => ({ ...prev, [activeTab]: value }))
   }
 
-  const startSession = async () => {
-    const session: SessionResult = await verifier.startSession(requestPerTab[activeTab])
-
+  const startVerifierSession = async (session: VerifierSessionResult) => {
     if (session.disclosures) {
       setWalletResponse(session.disclosures)
       setFrontendState(FrontendState.Done)
@@ -107,12 +109,44 @@ function App() {
     setPollingCallbackId(id)
   }
 
+  const startIssuerSession = async (session: IssuerSessionResult) => {
+    setWalletLink(session.walletLink)
+    setTxCode(session.txCode)
+    setFrontendState(FrontendState.Polling)
+
+    const id = setInterval(async () => {
+      const result = await session.poll()
+      if (result) {
+        clearInterval(id)
+        setIssuanceResult(result)
+        setFrontendState(FrontendState.Done)
+      }
+    }, 500)
+
+    setPollingCallbackId(id)
+  }
+
+  const startSession = async () => {
+    if (tab.kind === "verifier") {
+      const session = await tab.startSession(requestPerTab[activeTab])
+      await startVerifierSession(session)
+    } else {
+      const session = await tab.startSession(requestPerTab[activeTab])
+      await startIssuerSession(session)
+    }
+  }
+
   const cancel = () => {
     clearInterval(pollingCallbackId)
     setFrontendState(FrontendState.Pending)
+    setTxCode(undefined)
   }
 
-  const reset = () => setFrontendState(FrontendState.Pending)
+  const reset = () => {
+    setFrontendState(FrontendState.Pending)
+    setTxCode(undefined)
+    setIssuanceResult(null)
+  }
 
   return (
     <div className="h-full flex flex-col">
@@ -122,24 +156,32 @@ function App() {
       </header>
 
       <div className="flex-1 flex flex-col items-center w-full px-6 py-6 overflow-hidden">
-        <TabBar verifiers={verifiers} activeTab={activeTab} onSwitch={switchTab} />
+        <TabBar tabs={tabs} activeTab={activeTab} onSwitch={switchTab} />
 
         {frontendState === FrontendState.Pending && (
           <RequestEditor
             activeTab={activeTab}
             defaultValue={requestPerTab[activeTab]}
-            presets={verifier.presets}
+            presets={tab.presets}
             onChange={changeRequest}
             onStart={startSession}
           />
         )}
 
-        {frontendState === FrontendState.Polling && (
+        {frontendState === FrontendState.Polling && tab.kind === "verifier" && (
           <SessionPoller walletLink={walletLink} onCancel={cancel} />
         )}
 
-        {frontendState === FrontendState.Done && (
+        {frontendState === FrontendState.Polling && tab.kind === "issuer" && (
+          <IssuerSessionPoller walletLink={walletLink} txCode={txCode} onCancel={cancel} />
+        )}
+
+        {frontendState === FrontendState.Done && tab.kind === "verifier" && (
           <WalletResponseView disclosures={walletResponse} onReset={reset} />
+        )}
+
+        {frontendState === FrontendState.Done && tab.kind === "issuer" && issuanceResult && (
+          <IssuanceCompleteView credentialName={issuanceResult.credentialName} onReset={reset} />
         )}
       </div>
     </div>

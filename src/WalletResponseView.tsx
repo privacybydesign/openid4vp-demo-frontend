@@ -1,4 +1,4 @@
-import type { DisclosureContent } from "./verifiers"
+import type { DisclosureContent } from "./tabs"
 
 interface WalletResponseViewProps {
   disclosures: DisclosureContent[][]

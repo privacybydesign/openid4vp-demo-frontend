@@ -1,32 +1,5 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
-
-export interface DisclosureContent {
-  key: string
-  value: string
-}
-
-export interface SessionResult {
-  // For verifiers with manual QR/polling (EUDI, Veramo)
-  walletLink?: string
-  poll?: () => Promise<DisclosureContent[][] | null>
-  // For verifiers where the UI is managed externally (IRMA/yivi-popup)
-  disclosures?: DisclosureContent[][]
-}
-
-export type VerifierTab = "eudi" | "veramo" | "irma"
-
-export interface Preset {
-  label: string
-  request: object
-}
-
-export interface Verifier {
-  tab: VerifierTab
-  label: string
-  defaultRequest: object
-  presets?: Preset[]
-  startSession: (request: string) => Promise<SessionResult>
-}
+import type { DisclosureContent, Preset, VerifierTabConfig } from "./tabs"
 
 function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   const components = sdjwt.split("~")
@@ -331,7 +304,8 @@ const eudiPresets: Preset[] = [
   },
 ]
 
-export const eudiVerifier: Verifier = {
+export const eudiVerifier: VerifierTabConfig = {
+  kind: "verifier",
   tab: "eudi",
   label: "EUDI",
   defaultRequest: eudiPresets[0].request,
@@ -413,9 +387,10 @@ const veramoPresets: Preset[] = [
   },
 ]
 
-export const veramoVerifier: Verifier = {
-  tab: "veramo",
-  label: "Veramo",
+export const veramoVerifier: VerifierTabConfig = {
+  kind: "verifier",
+  tab: "veramo-verifier",
+  label: "Veramo Verifier",
   defaultRequest: veramoPresets[0].request,
   presets: veramoPresets,
   startSession: async (request: string) => {
@@ -576,7 +551,8 @@ function parseIrmaResult(result: any): DisclosureContent[][] {
   )
 }
 
-export const irmaVerifier: Verifier = {
+export const irmaVerifier: VerifierTabConfig = {
+  kind: "verifier",
   tab: "irma",
   label: "IRMA",
   defaultRequest: irmaPresets[0].request,
@@ -609,5 +585,3 @@ export const irmaVerifier: Verifier = {
     return { disclosures: parseIrmaResult(result) }
   },
 }
-
-export const verifiers: Verifier[] = [irmaVerifier, eudiVerifier, veramoVerifier]

@@ -3,11 +3,11 @@ import { EditorView, basicSetup } from "codemirror"
 import { json } from "@codemirror/lang-json"
 import { catppuccinLatte } from "@catppuccin/codemirror"
 import { EditorState } from "@codemirror/state"
-import type { Preset, VerifierTab } from "./verifiers"
+import type { Preset, TabId } from "./tabs"
 import compactJson from "./compactJson"
 
 interface RequestEditorProps {
-  activeTab: VerifierTab
+  activeTab: TabId
   defaultValue: string
   presets?: Preset[]
   onChange: (value: string) => void
