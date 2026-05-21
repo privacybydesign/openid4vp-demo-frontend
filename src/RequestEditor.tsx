@@ -16,7 +16,7 @@ interface RequestEditorProps {
 
 export default function RequestEditor({ activeTab, defaultValue, presets, onChange, onStart }: RequestEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<EditorView>()
+  const viewRef = useRef<EditorView | null>(null)
 
   useEffect(() => {
     if (!editorRef.current) return
