@@ -10,11 +10,12 @@ import WalletResponseView from "./WalletResponseView"
 import IssuerSessionPoller from "./IssuerSessionPoller"
 import IssuanceCompleteView from "./IssuanceCompleteView"
 
-enum FrontendState {
-  Pending,
-  Polling,
-  Done,
-}
+const FrontendState = {
+  Pending: "Pending",
+  Polling: "Polling",
+  Done: "Done",
+} as const
+type FrontendState = typeof FrontendState[keyof typeof FrontendState]
 
 function defaultRequestForTab(tab: TabId): string {
   return compactJson(tabs.find((t) => t.tab === tab)!.defaultRequest)
@@ -55,7 +56,7 @@ function writeStateToUrl(tab: TabId, request: string) {
 function App() {
   const initial = readStateFromUrl()
   const [activeTab, setActiveTab] = useState<TabId>(initial.tab)
-  const [frontendState, setFrontendState] = useState(FrontendState.Pending)
+  const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
   const [issuanceResult, setIssuanceResult] = useState<IssuanceComplete | null>(null)
