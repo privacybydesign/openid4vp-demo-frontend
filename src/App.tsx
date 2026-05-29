@@ -46,12 +46,14 @@ const allTabs = tabs.map((t) => t.tab)
 const issuerTab = tabs.find((t) => t.tab === ISSUER_TAB && t.kind === "issuer")
 const defaultIssuerMode: IssuerMode = issuerTab?.kind === "issuer" ? issuerTab.defaultMode : "pre-authorized-code"
 
+const DEFAULT_ISSUER_REQUEST = defaultRequestFor(ISSUER_TAB, "pre-authorized-code")
+
 function readStateFromUrl(): {
   tab: TabId
   mode: IssuerMode
   linkForm: LinkForm
   requestPerTab: Record<TabId, string>
-  issuerPerMode: Record<IssuerMode, string>
+  issuerRequest: string
 } {
   const params = new URLSearchParams(window.location.search)
 
@@ -72,31 +74,29 @@ function readStateFromUrl(): {
     allTabs.map((t) => [t, defaultRequestFor(t, null)])
   ) as Record<TabId, string>
 
-  const issuerPerMode: Record<IssuerMode, string> = {
-    "pre-authorized-code": defaultRequestFor(ISSUER_TAB, "pre-authorized-code"),
-    "authorization-code": defaultRequestFor(ISSUER_TAB, "authorization-code"),
-  }
+  let issuerRequest = DEFAULT_ISSUER_REQUEST
 
   const requestParam = params.get("request")
   if (requestParam) {
     try {
       const decoded = atob(requestParam)
       if (tab === ISSUER_TAB) {
-        issuerPerMode[mode] = decoded
+        issuerRequest = decoded
       } else {
         requestPerTab[tab] = decoded
       }
     } catch { /* ignore invalid base64 */ }
   }
 
-  return { tab, mode, linkForm, requestPerTab, issuerPerMode }
+  return { tab, mode, linkForm, requestPerTab, issuerRequest }
 }
 
 function writeStateToUrl(tab: TabId, mode: IssuerMode, linkForm: LinkForm, request: string) {
   const params = new URLSearchParams()
   params.set("tab", tab)
 
-  const isDefault = request === defaultRequestFor(tab, tab === ISSUER_TAB ? mode : null)
+  const defaultRequest = tab === ISSUER_TAB ? DEFAULT_ISSUER_REQUEST : defaultRequestFor(tab, null)
+  const isDefault = request === defaultRequest
   if (tab === ISSUER_TAB) {
     params.set("mode", mode)
   }
@@ -122,10 +122,10 @@ function App() {
   const [walletLink, setWalletLink] = useState("")
   const [txCode, setTxCode] = useState<string | undefined>(undefined)
   const [requestPerTab, setRequestPerTab] = useState(initial.requestPerTab)
-  const [issuerPerMode, setIssuerPerMode] = useState(initial.issuerPerMode)
+  const [issuerRequest, setIssuerRequest] = useState(initial.issuerRequest)
 
   const tab = tabs.find((t) => t.tab === activeTab)!
-  const currentRequest = activeTab === ISSUER_TAB ? issuerPerMode[activeMode] : requestPerTab[activeTab]
+  const currentRequest = activeTab === ISSUER_TAB ? issuerRequest : requestPerTab[activeTab]
   const showLinkFormToggle = activeTab !== "irma"
   const displayedLink = applyLinkForm(walletLink, linkForm, UNIVERSAL_LINK_HOST)
 
@@ -159,7 +159,7 @@ function App() {
 
   const changeRequest = (value: string) => {
     if (activeTab === ISSUER_TAB) {
-      setIssuerPerMode((prev) => ({ ...prev, [activeMode]: value }))
+      setIssuerRequest(value)
     } else {
       setRequestPerTab((prev) => ({ ...prev, [activeTab]: value }))
     }
@@ -209,7 +209,7 @@ function App() {
       const session = await tab.startSession(requestPerTab[activeTab])
       await startVerifierSession(session)
     } else {
-      const session = await tab.modes[activeMode].startSession(issuerPerMode[activeMode])
+      const session = await tab.modes[activeMode].startSession(issuerRequest)
       await startIssuerSession(session)
     }
   }

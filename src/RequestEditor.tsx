@@ -69,7 +69,7 @@ export default function RequestEditor({
     viewRef.current = view
 
     return () => view.destroy()
-  }, [activeTab, activeSubMode])
+  }, [activeTab])
 
   const selectPreset = (index: number) => {
     const text = compactJson(presets![index].request)
