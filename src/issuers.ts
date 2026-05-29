@@ -1,7 +1,8 @@
-import type { IssuerTabConfig, Preset } from "./tabs"
+import type { IssuerTabConfig, IssuerModeConfig, IssuerSessionResult, Preset } from "./tabs"
 
 const ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
-const ISSUER_NAME = import.meta.env.VITE_VERAMO_ISSUER_NAME ?? "test-issuer"
+const PRE_AUTH_ISSUER_NAME = import.meta.env.VITE_VERAMO_ISSUER_NAME ?? "test-issuer"
+const AUTH_CODE_ISSUER_NAME = import.meta.env.VITE_VERAMO_AUTHCODE_ISSUER_NAME ?? "authcode-issuer"
 const ISSUER_TOKEN = import.meta.env.VITE_VERAMO_ISSUER_ADMIN_TOKEN ?? "veramo-issuer-admin-token"
 
 const credentialDisplayNames: Record<string, string> = {
@@ -27,6 +28,12 @@ const preAuthGrantWithTxCode = {
   "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
     "pre-authorized_code": "generate",
     tx_code: { input_mode: "numeric", length: 6 },
+  },
+}
+
+const authCodeGrant = {
+  authorization_code: {
+    issuer_state: "generate",
   },
 }
 
@@ -108,7 +115,7 @@ const presetOrder: PresetSpec[] = [
 
 const ONE_YEAR_SECONDS = 31536000
 
-function offerRequest(credentialId: string, withTxCode: boolean): object {
+function preAuthOfferRequest(credentialId: string, withTxCode: boolean): object {
   return {
     credentials: [credentialId],
     grants: withTxCode ? preAuthGrantWithTxCode : preAuthGrant,
@@ -117,19 +124,28 @@ function offerRequest(credentialId: string, withTxCode: boolean): object {
   }
 }
 
-const veramoIssuerPresets: Preset[] = presetOrder.flatMap(({ credentialId, label }) => [
-  { label, request: offerRequest(credentialId, false) },
-  { label: `${label} (tx_code)`, request: offerRequest(credentialId, true) },
+function authCodeOfferRequest(credentialId: string): object {
+  return {
+    credentials: [credentialId],
+    grants: authCodeGrant,
+    credentialMetadata: { expiration: ONE_YEAR_SECONDS },
+    credentialDataSupplierInput: credentialDataByCredential[credentialId],
+  }
+}
+
+const preAuthPresets: Preset[] = presetOrder.flatMap(({ credentialId, label }) => [
+  { label, request: preAuthOfferRequest(credentialId, false) },
+  { label: `${label} (tx_code)`, request: preAuthOfferRequest(credentialId, true) },
 ])
 
-export const veramoIssuer: IssuerTabConfig = {
-  kind: "issuer",
-  tab: "veramo-issuer",
-  label: "Veramo Issuer",
-  defaultRequest: veramoIssuerPresets[0].request,
-  presets: veramoIssuerPresets,
-  startSession: async (request: string) => {
-    const response = await fetch(`${ISSUER_BASE}/${ISSUER_NAME}/api/create-offer`, {
+const authCodePresets: Preset[] = presetOrder.map(({ credentialId, label }) => ({
+  label,
+  request: authCodeOfferRequest(credentialId),
+}))
+
+function startSessionFor(issuerName: string) {
+  return async (request: string): Promise<IssuerSessionResult> => {
+    const response = await fetch(`${ISSUER_BASE}/${issuerName}/api/create-offer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -146,7 +162,7 @@ export const veramoIssuer: IssuerTabConfig = {
       walletLink: json.uri,
       txCode: json.txCode,
       poll: async () => {
-        const result = await fetch(`${ISSUER_BASE}/${ISSUER_NAME}/api/check-offer`, {
+        const result = await fetch(`${ISSUER_BASE}/${issuerName}/api/check-offer`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -160,5 +176,30 @@ export const veramoIssuer: IssuerTabConfig = {
         return { credentialName }
       },
     }
+  }
+}
+
+const preAuthMode: IssuerModeConfig = {
+  label: "Pre-authorized code",
+  defaultRequest: preAuthPresets[0].request,
+  presets: preAuthPresets,
+  startSession: startSessionFor(PRE_AUTH_ISSUER_NAME),
+}
+
+const authCodeMode: IssuerModeConfig = {
+  label: "Authorization code",
+  defaultRequest: authCodePresets[0].request,
+  presets: authCodePresets,
+  startSession: startSessionFor(AUTH_CODE_ISSUER_NAME),
+}
+
+export const veramoIssuer: IssuerTabConfig = {
+  kind: "issuer",
+  tab: "veramo-issuer",
+  label: "Veramo Issuer",
+  defaultMode: "pre-authorized-code",
+  modes: {
+    "pre-authorized-code": preAuthMode,
+    "authorization-code": authCodeMode,
   },
 }
