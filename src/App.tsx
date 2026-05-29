@@ -19,7 +19,7 @@ import IssuanceCompleteView from "./IssuanceCompleteView"
 import { applyLinkForm } from "./walletLink"
 import type { LinkForm } from "./walletLink"
 
-const UNIVERSAL_LINK_HOST = import.meta.env.VITE_UNIVERSAL_LINK_HOST ?? "open.yivi.app"
+const UNIVERSAL_LINK_HOST = import.meta.env.VITE_UNIVERSAL_LINK_HOST || "open.yivi.app"
 const ALL_LINK_FORMS: LinkForm[] = ["scheme", "universal"]
 const DEFAULT_LINK_FORM: LinkForm = "scheme"
 
