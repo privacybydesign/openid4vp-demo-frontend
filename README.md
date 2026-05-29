@@ -39,6 +39,7 @@ following to point at a different environment:
 | `VITE_VERAMO_VERIFIER_NAME` | Veramo verifier instance name        |
 | `VITE_VERAMO_ADMIN_TOKEN`   | Veramo verifier admin token          |
 | `VITE_IRMA_SERVER_URL`      | IRMA server (status / cancel)        |
+| `VITE_UNIVERSAL_LINK_HOST`  | Host for OpenID4VC universal links (default `open.yivi.app`) |
 
 The source defaults (`src/verifiers.ts`, `src/issuers.ts`) cover the Veramo
 issuer endpoints. Override `VITE_VERAMO_ISSUER_API_URL`,

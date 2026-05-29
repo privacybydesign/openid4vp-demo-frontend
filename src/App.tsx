@@ -16,6 +16,12 @@ import SessionPoller from "./SessionPoller"
 import WalletResponseView from "./WalletResponseView"
 import IssuerSessionPoller from "./IssuerSessionPoller"
 import IssuanceCompleteView from "./IssuanceCompleteView"
+import { applyLinkForm } from "./walletLink"
+import type { LinkForm } from "./walletLink"
+
+const UNIVERSAL_LINK_HOST = import.meta.env.VITE_UNIVERSAL_LINK_HOST ?? "open.yivi.app"
+const ALL_LINK_FORMS: LinkForm[] = ["scheme", "universal"]
+const DEFAULT_LINK_FORM: LinkForm = "scheme"
 
 const FrontendState = {
   Pending: "Pending",
@@ -43,6 +49,7 @@ const defaultIssuerMode: IssuerMode = issuerTab?.kind === "issuer" ? issuerTab.d
 function readStateFromUrl(): {
   tab: TabId
   mode: IssuerMode
+  linkForm: LinkForm
   requestPerTab: Record<TabId, string>
   issuerPerMode: Record<IssuerMode, string>
 } {
@@ -55,6 +62,11 @@ function readStateFromUrl(): {
   const mode: IssuerMode = ALL_ISSUER_MODES.includes(modeParam as IssuerMode)
     ? (modeParam as IssuerMode)
     : defaultIssuerMode
+
+  const linkParam = params.get("link")
+  const linkForm: LinkForm = ALL_LINK_FORMS.includes(linkParam as LinkForm)
+    ? (linkParam as LinkForm)
+    : DEFAULT_LINK_FORM
 
   const requestPerTab = Object.fromEntries(
     allTabs.map((t) => [t, defaultRequestFor(t, null)])
@@ -77,16 +89,19 @@ function readStateFromUrl(): {
     } catch { /* ignore invalid base64 */ }
   }
 
-  return { tab, mode, requestPerTab, issuerPerMode }
+  return { tab, mode, linkForm, requestPerTab, issuerPerMode }
 }
 
-function writeStateToUrl(tab: TabId, mode: IssuerMode, request: string) {
+function writeStateToUrl(tab: TabId, mode: IssuerMode, linkForm: LinkForm, request: string) {
   const params = new URLSearchParams()
   params.set("tab", tab)
 
   const isDefault = request === defaultRequestFor(tab, tab === ISSUER_TAB ? mode : null)
   if (tab === ISSUER_TAB) {
     params.set("mode", mode)
+  }
+  if (tab !== "irma" && linkForm !== DEFAULT_LINK_FORM) {
+    params.set("link", linkForm)
   }
   if (!isDefault) {
     params.set("request", btoa(request))
@@ -99,6 +114,7 @@ function App() {
   const initial = readStateFromUrl()
   const [activeTab, setActiveTab] = useState<TabId>(initial.tab)
   const [activeMode, setActiveMode] = useState<IssuerMode>(initial.mode)
+  const [linkForm, setLinkForm] = useState<LinkForm>(initial.linkForm)
   const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
@@ -110,19 +126,21 @@ function App() {
 
   const tab = tabs.find((t) => t.tab === activeTab)!
   const currentRequest = activeTab === ISSUER_TAB ? issuerPerMode[activeMode] : requestPerTab[activeTab]
+  const showLinkFormToggle = activeTab !== "irma"
+  const displayedLink = applyLinkForm(walletLink, linkForm, UNIVERSAL_LINK_HOST)
 
   const updateUrl = useCallback(
-    (tab: TabId, mode: IssuerMode, request: string) => {
-      writeStateToUrl(tab, mode, request)
+    (tab: TabId, mode: IssuerMode, linkForm: LinkForm, request: string) => {
+      writeStateToUrl(tab, mode, linkForm, request)
     },
     []
   )
 
   useEffect(() => {
     if (frontendState === FrontendState.Pending) {
-      updateUrl(activeTab, activeMode, currentRequest)
+      updateUrl(activeTab, activeMode, linkForm, currentRequest)
     }
-  }, [activeTab, activeMode, currentRequest, frontendState, updateUrl])
+  }, [activeTab, activeMode, linkForm, currentRequest, frontendState, updateUrl])
 
   const switchTab = (next: TabId) => {
     if (frontendState !== FrontendState.Pending) return
@@ -132,6 +150,11 @@ function App() {
   const switchMode = (next: IssuerMode) => {
     if (frontendState !== FrontendState.Pending) return
     setActiveMode(next)
+  }
+
+  const switchLinkForm = (next: LinkForm) => {
+    if (frontendState !== FrontendState.Pending) return
+    setLinkForm(next)
   }
 
   const changeRequest = (value: string) => {
@@ -226,17 +249,20 @@ function App() {
             subModes={subModes}
             activeSubMode={tab.kind === "issuer" ? activeMode : undefined}
             onSubModeChange={(id) => switchMode(id as IssuerMode)}
+            showLinkForm={showLinkFormToggle}
+            linkForm={linkForm}
+            onLinkFormChange={switchLinkForm}
             onChange={changeRequest}
             onStart={startSession}
           />
         )}
 
         {frontendState === FrontendState.Polling && tab.kind === "verifier" && (
-          <SessionPoller walletLink={walletLink} onCancel={cancel} />
+          <SessionPoller walletLink={displayedLink} linkForm={linkForm} onCancel={cancel} />
         )}
 
         {frontendState === FrontendState.Polling && tab.kind === "issuer" && (
-          <IssuerSessionPoller walletLink={walletLink} txCode={txCode} onCancel={cancel} />
+          <IssuerSessionPoller walletLink={displayedLink} linkForm={linkForm} txCode={txCode} onCancel={cancel} />
         )}
 
         {frontendState === FrontendState.Done && tab.kind === "verifier" && (

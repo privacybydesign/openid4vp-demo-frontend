@@ -14,3 +14,4 @@ services:
       - VERAMO_VERIFIER_NAME=test-verifier
       - VERAMO_ADMIN_TOKEN=veramo-verifier-admin-token
       - IRMA_SERVER_URL=https://is.demo.staging.yivi.app
+      - UNIVERSAL_LINK_HOST=open.yivi.app

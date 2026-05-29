@@ -319,7 +319,7 @@ export const eudiVerifier: VerifierTabConfig = {
     const json = await response.json()
 
     const params = new URLSearchParams(json)
-    const walletLink = `eudi-openid4vp://?${params}`
+    const walletLink = `openid4vp://?${params}`
     const transactionId = json["transaction_id"]
 
     return {
