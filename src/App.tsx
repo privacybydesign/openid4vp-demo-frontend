@@ -238,7 +238,7 @@ function App() {
         <h1 className="text-lg font-bold text-[#484747] m-0">Verifier Tool</h1>
       </header>
 
-      <div className="flex-1 flex flex-col items-center w-full px-6 py-6 overflow-hidden">
+      <div className="flex-1 flex flex-col items-center w-full px-3 py-4 md:px-6 md:py-6 overflow-y-auto md:overflow-hidden">
         <TabBar tabs={tabs} activeTab={activeTab} onSwitch={switchTab} />
 
         {frontendState === FrontendState.Pending && (

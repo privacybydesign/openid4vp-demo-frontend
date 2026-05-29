@@ -57,6 +57,11 @@ export default function RequestEditor({
           basicSetup,
           json(),
           catppuccinLatte,
+          EditorView.lineWrapping,
+          EditorView.theme({
+            "&": { fontSize: "14px" },
+            ".cm-content": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
+          }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               onChange(update.state.doc.toString())
@@ -83,8 +88,8 @@ export default function RequestEditor({
   }
 
   return (
-    <div className="flex-1 w-full flex flex-row gap-4 overflow-hidden">
-      <div className="flex flex-col gap-4 w-64 shrink-0">
+    <div className="flex-1 w-full flex flex-col md:flex-row gap-4 md:overflow-hidden">
+      <div className="flex flex-col gap-4 w-full md:w-64 md:shrink-0">
         {presets && (
           <select
             className="border border-[#CFE4EF] rounded-md px-4 py-[0.65rem] text-[16px] font-semibold text-[#484747] bg-white focus:outline-none focus:border-[#00508a]"
@@ -143,7 +148,7 @@ export default function RequestEditor({
       </div>
       <div
         ref={editorRef}
-        className="flex-1 overflow-auto rounded-lg border border-[#CFE4EF] bg-white"
+        className="flex-1 w-full min-h-[60vh] md:min-h-0 overflow-auto rounded-lg border border-[#CFE4EF] bg-white"
       />
     </div>
   )
