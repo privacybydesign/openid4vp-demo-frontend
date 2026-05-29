@@ -3,6 +3,8 @@ import { veramoIssuer } from "./issuers"
 
 export type TabId = "irma" | "eudi" | "veramo-verifier" | "veramo-issuer"
 
+export type IssuerMode = "pre-authorized-code" | "authorization-code"
+
 export interface DisclosureContent {
   key: string
   value: string
@@ -16,8 +18,6 @@ export interface Preset {
 interface TabBase {
   tab: TabId
   label: string
-  defaultRequest: object
-  presets?: Preset[]
 }
 
 export interface VerifierSessionResult {
@@ -38,12 +38,22 @@ export interface IssuerSessionResult {
 
 export interface VerifierTabConfig extends TabBase {
   kind: "verifier"
+  defaultRequest: object
+  presets?: Preset[]
   startSession: (request: string) => Promise<VerifierSessionResult>
+}
+
+export interface IssuerModeConfig {
+  label: string
+  defaultRequest: object
+  presets: Preset[]
+  startSession: (request: string) => Promise<IssuerSessionResult>
 }
 
 export interface IssuerTabConfig extends TabBase {
   kind: "issuer"
-  startSession: (request: string) => Promise<IssuerSessionResult>
+  modes: Record<IssuerMode, IssuerModeConfig>
+  defaultMode: IssuerMode
 }
 
 export type TabConfig = VerifierTabConfig | IssuerTabConfig

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from "react"
 import "./App.css"
 import { tabs } from "./tabs"
-import type { TabId, DisclosureContent, IssuanceComplete, VerifierSessionResult, IssuerSessionResult } from "./tabs"
+import type {
+  TabId,
+  IssuerMode,
+  DisclosureContent,
+  IssuanceComplete,
+  VerifierSessionResult,
+  IssuerSessionResult,
+} from "./tabs"
 import compactJson from "./compactJson"
 import TabBar from "./TabBar"
 import RequestEditor from "./RequestEditor"
@@ -17,35 +24,70 @@ const FrontendState = {
 } as const
 type FrontendState = typeof FrontendState[keyof typeof FrontendState]
 
-function defaultRequestForTab(tab: TabId): string {
-  return compactJson(tabs.find((t) => t.tab === tab)!.defaultRequest)
+const ISSUER_TAB: TabId = "veramo-issuer"
+const ALL_ISSUER_MODES: IssuerMode[] = ["pre-authorized-code", "authorization-code"]
+
+function defaultRequestFor(tabId: TabId, mode: IssuerMode | null): string {
+  const tab = tabs.find((t) => t.tab === tabId)!
+  if (tab.kind === "issuer") {
+    const modeId = mode ?? tab.defaultMode
+    return compactJson(tab.modes[modeId].defaultRequest)
+  }
+  return compactJson(tab.defaultRequest)
 }
 
 const allTabs = tabs.map((t) => t.tab)
+const issuerTab = tabs.find((t) => t.tab === ISSUER_TAB && t.kind === "issuer")
+const defaultIssuerMode: IssuerMode = issuerTab?.kind === "issuer" ? issuerTab.defaultMode : "pre-authorized-code"
 
-function readStateFromUrl(): { tab: TabId; requestPerTab: Record<TabId, string> } {
+function readStateFromUrl(): {
+  tab: TabId
+  mode: IssuerMode
+  requestPerTab: Record<TabId, string>
+  issuerPerMode: Record<IssuerMode, string>
+} {
   const params = new URLSearchParams(window.location.search)
 
   const tabParam = params.get("tab")
   const tab: TabId = allTabs.includes(tabParam as TabId) ? (tabParam as TabId) : "irma"
 
-  const defaults = Object.fromEntries(allTabs.map((t) => [t, defaultRequestForTab(t)])) as Record<TabId, string>
+  const modeParam = params.get("mode")
+  const mode: IssuerMode = ALL_ISSUER_MODES.includes(modeParam as IssuerMode)
+    ? (modeParam as IssuerMode)
+    : defaultIssuerMode
+
+  const requestPerTab = Object.fromEntries(
+    allTabs.map((t) => [t, defaultRequestFor(t, null)])
+  ) as Record<TabId, string>
+
+  const issuerPerMode: Record<IssuerMode, string> = {
+    "pre-authorized-code": defaultRequestFor(ISSUER_TAB, "pre-authorized-code"),
+    "authorization-code": defaultRequestFor(ISSUER_TAB, "authorization-code"),
+  }
 
   const requestParam = params.get("request")
   if (requestParam) {
     try {
-      defaults[tab] = atob(requestParam)
+      const decoded = atob(requestParam)
+      if (tab === ISSUER_TAB) {
+        issuerPerMode[mode] = decoded
+      } else {
+        requestPerTab[tab] = decoded
+      }
     } catch { /* ignore invalid base64 */ }
   }
 
-  return { tab, requestPerTab: defaults }
+  return { tab, mode, requestPerTab, issuerPerMode }
 }
 
-function writeStateToUrl(tab: TabId, request: string) {
+function writeStateToUrl(tab: TabId, mode: IssuerMode, request: string) {
   const params = new URLSearchParams()
   params.set("tab", tab)
 
-  const isDefault = request === defaultRequestForTab(tab)
+  const isDefault = request === defaultRequestFor(tab, tab === ISSUER_TAB ? mode : null)
+  if (tab === ISSUER_TAB) {
+    params.set("mode", mode)
+  }
   if (!isDefault) {
     params.set("request", btoa(request))
   }
@@ -56,6 +98,7 @@ function writeStateToUrl(tab: TabId, request: string) {
 function App() {
   const initial = readStateFromUrl()
   const [activeTab, setActiveTab] = useState<TabId>(initial.tab)
+  const [activeMode, setActiveMode] = useState<IssuerMode>(initial.mode)
   const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
@@ -63,29 +106,40 @@ function App() {
   const [walletLink, setWalletLink] = useState("")
   const [txCode, setTxCode] = useState<string | undefined>(undefined)
   const [requestPerTab, setRequestPerTab] = useState(initial.requestPerTab)
+  const [issuerPerMode, setIssuerPerMode] = useState(initial.issuerPerMode)
 
   const tab = tabs.find((t) => t.tab === activeTab)!
+  const currentRequest = activeTab === ISSUER_TAB ? issuerPerMode[activeMode] : requestPerTab[activeTab]
 
   const updateUrl = useCallback(
-    (tab: TabId, requests: Record<TabId, string>) => {
-      writeStateToUrl(tab, requests[tab])
+    (tab: TabId, mode: IssuerMode, request: string) => {
+      writeStateToUrl(tab, mode, request)
     },
     []
   )
 
   useEffect(() => {
     if (frontendState === FrontendState.Pending) {
-      updateUrl(activeTab, requestPerTab)
+      updateUrl(activeTab, activeMode, currentRequest)
     }
-  }, [activeTab, requestPerTab, frontendState, updateUrl])
+  }, [activeTab, activeMode, currentRequest, frontendState, updateUrl])
 
   const switchTab = (next: TabId) => {
     if (frontendState !== FrontendState.Pending) return
     setActiveTab(next)
   }
 
+  const switchMode = (next: IssuerMode) => {
+    if (frontendState !== FrontendState.Pending) return
+    setActiveMode(next)
+  }
+
   const changeRequest = (value: string) => {
-    setRequestPerTab((prev) => ({ ...prev, [activeTab]: value }))
+    if (activeTab === ISSUER_TAB) {
+      setIssuerPerMode((prev) => ({ ...prev, [activeMode]: value }))
+    } else {
+      setRequestPerTab((prev) => ({ ...prev, [activeTab]: value }))
+    }
   }
 
   const startVerifierSession = async (session: VerifierSessionResult) => {
@@ -132,7 +186,7 @@ function App() {
       const session = await tab.startSession(requestPerTab[activeTab])
       await startVerifierSession(session)
     } else {
-      const session = await tab.startSession(requestPerTab[activeTab])
+      const session = await tab.modes[activeMode].startSession(issuerPerMode[activeMode])
       await startIssuerSession(session)
     }
   }
@@ -149,6 +203,11 @@ function App() {
     setIssuanceResult(null)
   }
 
+  const subModes = tab.kind === "issuer"
+    ? ALL_ISSUER_MODES.map((id) => ({ id, label: tab.modes[id].label }))
+    : undefined
+  const presets = tab.kind === "issuer" ? tab.modes[activeMode].presets : tab.presets
+
   return (
     <div className="h-full flex flex-col">
       <header className="bg-white border-b border-[#CFE4EF] flex items-center px-4 py-4 gap-4">
@@ -162,8 +221,11 @@ function App() {
         {frontendState === FrontendState.Pending && (
           <RequestEditor
             activeTab={activeTab}
-            defaultValue={requestPerTab[activeTab]}
-            presets={tab.presets}
+            defaultValue={currentRequest}
+            presets={presets}
+            subModes={subModes}
+            activeSubMode={tab.kind === "issuer" ? activeMode : undefined}
+            onSubModeChange={(id) => switchMode(id as IssuerMode)}
             onChange={changeRequest}
             onStart={startSession}
           />
