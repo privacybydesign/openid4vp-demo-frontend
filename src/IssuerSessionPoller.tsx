@@ -11,6 +11,7 @@ interface IssuerSessionPollerProps {
 const linkFormLabel: Record<LinkForm, string> = {
   scheme: "Using custom scheme",
   universal: "Using universal link",
+  "universal-staging": "Using universal link (staging)",
 }
 
 export default function IssuerSessionPoller({ walletLink, linkForm, txCode, onCancel }: IssuerSessionPollerProps) {

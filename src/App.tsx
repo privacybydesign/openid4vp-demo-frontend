@@ -20,8 +20,13 @@ import { applyLinkForm } from "./walletLink"
 import type { LinkForm } from "./walletLink"
 
 const UNIVERSAL_LINK_HOST = import.meta.env.VITE_UNIVERSAL_LINK_HOST || "open.yivi.app"
-const ALL_LINK_FORMS: LinkForm[] = ["scheme", "universal"]
+const UNIVERSAL_LINK_HOST_STAGING = import.meta.env.VITE_UNIVERSAL_LINK_HOST_STAGING || "open.staging.yivi.app"
+const ALL_LINK_FORMS: LinkForm[] = ["scheme", "universal", "universal-staging"]
 const DEFAULT_LINK_FORM: LinkForm = "scheme"
+
+function hostForLinkForm(form: LinkForm): string {
+  return form === "universal-staging" ? UNIVERSAL_LINK_HOST_STAGING : UNIVERSAL_LINK_HOST
+}
 
 const FrontendState = {
   Pending: "Pending",
@@ -127,7 +132,7 @@ function App() {
   const tab = tabs.find((t) => t.tab === activeTab)!
   const currentRequest = activeTab === ISSUER_TAB ? issuerRequest : requestPerTab[activeTab]
   const showLinkFormToggle = activeTab !== "irma"
-  const displayedLink = applyLinkForm(walletLink, linkForm, UNIVERSAL_LINK_HOST)
+  const displayedLink = applyLinkForm(walletLink, linkForm, hostForLinkForm(linkForm))
 
   const updateUrl = useCallback(
     (tab: TabId, mode: IssuerMode, linkForm: LinkForm, request: string) => {

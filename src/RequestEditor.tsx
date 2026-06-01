@@ -29,6 +29,7 @@ interface RequestEditorProps {
 const linkFormOptions: { id: LinkForm; label: string }[] = [
   { id: "scheme", label: "Custom scheme" },
   { id: "universal", label: "Universal link" },
+  { id: "universal-staging", label: "Universal link (staging)" },
 ]
 
 export default function RequestEditor({

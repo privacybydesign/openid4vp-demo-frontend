@@ -1,4 +1,4 @@
-export type LinkForm = "scheme" | "universal"
+export type LinkForm = "scheme" | "universal" | "universal-staging"
 
 const UNIVERSAL_PATH_BY_SCHEME: Record<string, string> = {
   "openid4vp:": "/-/openid4vp",
@@ -22,5 +22,5 @@ export function toUniversalLink(uri: string, host: string): string {
 }
 
 export function applyLinkForm(uri: string, form: LinkForm, host: string): string {
-  return form === "universal" ? toUniversalLink(uri, host) : uri
+  return form === "scheme" ? uri : toUniversalLink(uri, host)
 }
