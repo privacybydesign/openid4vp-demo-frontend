@@ -1,5 +1,6 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
 import type { DisclosureContent, Preset, VerifierTabConfig } from "./tabs"
+import { requireEnv } from "./env"
 
 function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   const components = sdjwt.split("~")
@@ -342,7 +343,7 @@ export const eudiVerifier: VerifierTabConfig = {
 
 const VERAMO_API_URL = import.meta.env.VITE_VERAMO_API_URL ?? "https://veramo-verifier.openid4vc.staging.yivi.app"
 const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-verifier"
-const VERAMO_ADMIN_TOKEN = import.meta.env.VITE_VERAMO_ADMIN_TOKEN ?? "veramo-verifier-admin-token"
+const VERAMO_ADMIN_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ADMIN_TOKEN, "VITE_VERAMO_ADMIN_TOKEN")
 
 const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
 

@@ -1,9 +1,10 @@
 import type { IssuerTabConfig, IssuerModeConfig, IssuerSessionResult, Preset } from "./tabs"
+import { requireEnv } from "./env"
 
 const ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
 const PRE_AUTH_ISSUER_NAME = import.meta.env.VITE_VERAMO_ISSUER_NAME ?? "test-issuer"
 const AUTH_CODE_ISSUER_NAME = import.meta.env.VITE_VERAMO_AUTHCODE_ISSUER_NAME ?? "authcode-issuer"
-const ISSUER_TOKEN = import.meta.env.VITE_VERAMO_ISSUER_ADMIN_TOKEN ?? "veramo-issuer-admin-token"
+const ISSUER_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ISSUER_ADMIN_TOKEN, "VITE_VERAMO_ISSUER_ADMIN_TOKEN")
 
 const credentialDisplayNames: Record<string, string> = {
   EmailCredentialSdJwt: "Email Credential (SD-JWT)",
