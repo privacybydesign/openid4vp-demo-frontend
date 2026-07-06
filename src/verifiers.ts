@@ -1,4 +1,5 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
+import type { SessionPtr } from "@privacybydesign/yivi-frontend"
 import type { DisclosureContent, Preset, VerifierTabConfig } from "./tabs"
 import { requireEnv } from "./env"
 
@@ -331,7 +332,7 @@ export const eudiVerifier: VerifierTabConfig = {
 
         const response = await result.json()
         const entries = new Map<string, string[]>(Object.entries(response["vp_token"]))
-        return Array.from(entries, ([_, sdjwts]) => sdjwts.map(parseSdJwtVc).flat())
+        return Array.from(entries.values(), (sdjwts) => sdjwts.map(parseSdJwtVc).flat())
       },
     }
   },
@@ -346,6 +347,11 @@ const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-
 const VERAMO_ADMIN_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ADMIN_TOKEN, "VITE_VERAMO_ADMIN_TOKEN")
 
 const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
+
+// Shape of a single credential in a Veramo check-offer response.
+interface VeramoCredential {
+  claims: Record<string, unknown>
+}
 
 function veramoVct(name: string): string {
   return `${VERAMO_ISSUER_BASE}/vct/${name}`
@@ -603,10 +609,10 @@ export const veramoVerifier: VerifierTabConfig = {
         const response = await result.json()
         if (response.status !== "VERIFIED" && response.status !== "RESPONSE_RECEIVED") return null
 
-        const credentials = response.result?.credentials ?? {}
-        return Object.values(credentials).map((creds: any) =>
+        const credentials: Record<string, VeramoCredential[]> = response.result?.credentials ?? {}
+        return Object.values(credentials).map((creds) =>
           creds
-            .map((cred: any) =>
+            .map((cred) =>
               Object.entries(cred.claims).map(([key, value]) => ({
                 key,
                 value: String(value),
@@ -625,7 +631,19 @@ export const veramoVerifier: VerifierTabConfig = {
 
 const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL ?? "https://is.openid4vc.staging.yivi.app"
 
-function irmaRequest(disclose: any): object {
+// A disclosure request is a "condiscon": a list of "discons", each a list of
+// "cons", each a list of attribute identifiers (a plain id, or an id with a
+// required value).
+type IrmaAttribute = string | { type: string; value: string }
+type IrmaCondiscon = IrmaAttribute[][][]
+
+// Response shape of the IRMA server's POST /session endpoint.
+interface IrmaSessionResponse {
+  sessionPtr: SessionPtr
+  token: string
+}
+
+function irmaRequest(disclose: IrmaCondiscon): object {
   return {
     "@context": "https://irma.app/ld/request/disclosure/v2",
     disclose,
@@ -728,10 +746,17 @@ const irmaPresets: Preset[] = [
   },
 ]
 
-function parseIrmaResult(result: any): DisclosureContent[][] {
-  if (!result?.disclosed) return []
-  return result.disclosed.map((discon: any[]) =>
-    discon.map((attr: any) => ({
+interface IrmaDisclosedAttribute {
+  id: string
+  rawvalue?: string
+  value?: Record<string, string>
+}
+
+function parseIrmaResult(result: unknown): DisclosureContent[][] {
+  const disclosed = (result as { disclosed?: IrmaDisclosedAttribute[][] })?.disclosed
+  if (!disclosed) return []
+  return disclosed.map((discon) =>
+    discon.map((attr) => ({
       key: attr.id.split(".").pop() ?? attr.id,
       value: attr.rawvalue ?? attr.value?.[""] ?? String(attr.value),
     }))
@@ -752,17 +777,17 @@ export const irmaVerifier: VerifierTabConfig = {
       session: {
         url: IRMA_SERVER_URL,
         start: {
-          url: (o: any) => `${o.url}/session`,
+          url: (o) => `${o.url}/session`,
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(parsedRequest),
         },
         mapping: {
-          sessionPtr: (r: any) => r.sessionPtr,
-          sessionToken: (r: any) => r.token,
+          sessionPtr: (r) => (r as IrmaSessionResponse).sessionPtr,
+          sessionToken: (r) => (r as IrmaSessionResponse).token,
         },
         result: {
-          url: (o: any, { sessionToken }: any) => `${o.url}/session/${sessionToken}/result`,
+          url: (o, { sessionToken }) => `${o.url}/session/${sessionToken}/result`,
           method: "GET",
         },
       },
