@@ -317,11 +317,17 @@ export const eudiVerifier: VerifierTabConfig = {
       headers: { "Content-Type": "application/json" },
       body: request,
     })
+    if (!response.ok) {
+      throw new Error(`Failed to create presentation session (HTTP ${response.status})`)
+    }
     const json = await response.json()
 
     const params = new URLSearchParams(json)
     const walletLink = `openid4vp://?${params}`
     const transactionId = json["transaction_id"]
+    if (!transactionId) {
+      throw new Error("Presentation response is missing 'transaction_id'")
+    }
 
     return {
       walletLink,
@@ -589,8 +595,17 @@ export const veramoVerifier: VerifierTabConfig = {
       },
       body: request,
     })
+    if (!response.ok) {
+      throw new Error(`Failed to create DCQL offer (HTTP ${response.status})`)
+    }
     const json = await response.json()
     const state = json.state
+    if (!state) {
+      throw new Error("Offer response is missing 'state'")
+    }
+    if (!json.requestUri) {
+      throw new Error("Offer response is missing 'requestUri'")
+    }
 
     return {
       walletLink: json.requestUri,

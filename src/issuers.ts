@@ -154,7 +154,16 @@ function startSessionFor(issuerName: string) {
       },
       body: request,
     })
+    if (!response.ok) {
+      throw new Error(`Failed to create credential offer (HTTP ${response.status})`)
+    }
     const json = await response.json()
+    if (!json.uri) {
+      throw new Error("Offer response is missing 'uri'")
+    }
+    if (!json.id) {
+      throw new Error("Offer response is missing 'id'")
+    }
 
     const credentialId: string = JSON.parse(request).credentials?.[0] ?? ""
     const credentialName = displayNameFor(credentialId)

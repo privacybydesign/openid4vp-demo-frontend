@@ -16,6 +16,7 @@ import SessionPoller from "./SessionPoller"
 import WalletResponseView from "./WalletResponseView"
 import IssuerSessionPoller from "./IssuerSessionPoller"
 import IssuanceCompleteView from "./IssuanceCompleteView"
+import ErrorView from "./ErrorView"
 import { applyLinkForm } from "./walletLink"
 import type { LinkForm } from "./walletLink"
 
@@ -32,6 +33,7 @@ const FrontendState = {
   Pending: "Pending",
   Polling: "Polling",
   Done: "Done",
+  Error: "Error",
 } as const
 type FrontendState = typeof FrontendState[keyof typeof FrontendState]
 
@@ -126,6 +128,7 @@ function App() {
   const [issuanceResult, setIssuanceResult] = useState<IssuanceComplete | null>(null)
   const [walletLink, setWalletLink] = useState("")
   const [txCode, setTxCode] = useState<string | undefined>(undefined)
+  const [errorMessage, setErrorMessage] = useState<string>("")
   const [requestPerTab, setRequestPerTab] = useState(initial.requestPerTab)
   const [issuerRequest, setIssuerRequest] = useState(initial.issuerRequest)
 
@@ -170,6 +173,12 @@ function App() {
     }
   }
 
+  const showError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    setErrorMessage(message)
+    setFrontendState(FrontendState.Error)
+  }
+
   const startVerifierSession = async (session: VerifierSessionResult) => {
     if (session.disclosures) {
       setWalletResponse(session.disclosures)
@@ -181,11 +190,16 @@ function App() {
     setFrontendState(FrontendState.Polling)
 
     const id = setInterval(async () => {
-      const result = await session.poll!()
-      if (result) {
+      try {
+        const result = await session.poll!()
+        if (result) {
+          clearInterval(id)
+          setWalletResponse(result)
+          setFrontendState(FrontendState.Done)
+        }
+      } catch (error) {
         clearInterval(id)
-        setWalletResponse(result)
-        setFrontendState(FrontendState.Done)
+        showError(error)
       }
     }, 500)
 
@@ -198,11 +212,16 @@ function App() {
     setFrontendState(FrontendState.Polling)
 
     const id = setInterval(async () => {
-      const result = await session.poll()
-      if (result) {
+      try {
+        const result = await session.poll()
+        if (result) {
+          clearInterval(id)
+          setIssuanceResult(result)
+          setFrontendState(FrontendState.Done)
+        }
+      } catch (error) {
         clearInterval(id)
-        setIssuanceResult(result)
-        setFrontendState(FrontendState.Done)
+        showError(error)
       }
     }, 500)
 
@@ -210,12 +229,16 @@ function App() {
   }
 
   const startSession = async () => {
-    if (tab.kind === "verifier") {
-      const session = await tab.startSession(requestPerTab[activeTab])
-      await startVerifierSession(session)
-    } else {
-      const session = await tab.modes[activeMode].startSession(issuerRequest)
-      await startIssuerSession(session)
+    try {
+      if (tab.kind === "verifier") {
+        const session = await tab.startSession(requestPerTab[activeTab])
+        await startVerifierSession(session)
+      } else {
+        const session = await tab.modes[activeMode].startSession(issuerRequest)
+        await startIssuerSession(session)
+      }
+    } catch (error) {
+      showError(error)
     }
   }
 
@@ -226,9 +249,11 @@ function App() {
   }
 
   const reset = () => {
+    clearInterval(pollingCallbackId)
     setFrontendState(FrontendState.Pending)
     setTxCode(undefined)
     setIssuanceResult(null)
+    setErrorMessage("")
   }
 
   const subModes = tab.kind === "issuer"
@@ -276,6 +301,10 @@ function App() {
 
         {frontendState === FrontendState.Done && tab.kind === "issuer" && issuanceResult && (
           <IssuanceCompleteView credentialName={issuanceResult.credentialName} onReset={reset} />
+        )}
+
+        {frontendState === FrontendState.Error && (
+          <ErrorView message={errorMessage} onReset={reset} />
         )}
       </div>
     </div>
