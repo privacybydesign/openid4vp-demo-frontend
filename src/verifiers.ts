@@ -1,6 +1,7 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
 import type { SessionPtr } from "@privacybydesign/yivi-frontend"
-import type { DisclosureContent, Preset, VerifierTabConfig } from "./tabs"
+import type { DisclosureContent, Preset, VerifierSessionResult, VerifierTabConfig } from "./tabs"
+import type { LinkForm } from "./walletLink"
 import { requireEnv } from "./env"
 
 function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
@@ -778,13 +779,46 @@ function parseIrmaResult(result: unknown): DisclosureContent[][] {
   )
 }
 
+// Starts the session directly against the IRMA server (the same endpoints the
+// popup uses) so the session link and its host are under our control.
+async function startIrmaSessionWithLink(request: string): Promise<VerifierSessionResult> {
+  const response = await fetch(`${IRMA_SERVER_URL}/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: request,
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to create IRMA session (HTTP ${response.status})`)
+  }
+  const session = (await response.json()) as IrmaSessionResponse
+
+  return {
+    walletLink: `irma://qr/json/${encodeURIComponent(JSON.stringify(session.sessionPtr))}`,
+    poll: async () => {
+      const response = await fetch(`${IRMA_SERVER_URL}/session/${session.token}/result`)
+      if (response.status !== 200) return null
+
+      const result = (await response.json()) as { status?: string }
+      if (result.status === "CANCELLED" || result.status === "TIMEOUT") {
+        throw new Error(`IRMA session ${result.status.toLowerCase()}`)
+      }
+      if (result.status !== "DONE") return null
+      return parseIrmaResult(result)
+    },
+  }
+}
+
 export const irmaVerifier: VerifierTabConfig = {
   kind: "verifier",
   tab: "irma",
   label: "IRMA",
   defaultRequest: irmaPresets[0].request,
   presets: irmaPresets,
-  startSession: async (request: string) => {
+  startSession: async (request: string, linkForm: LinkForm) => {
+    if (linkForm !== "scheme") {
+      return startIrmaSessionWithLink(request)
+    }
+
     const parsedRequest = JSON.parse(request)
 
     const popup = newPopup({

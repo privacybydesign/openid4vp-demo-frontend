@@ -1,5 +1,6 @@
 import { irmaVerifier, eudiVerifier, veramoVerifier } from "./verifiers"
 import { veramoIssuer } from "./issuers"
+import type { LinkForm } from "./walletLink"
 
 export type TabId = "irma" | "eudi" | "veramo-verifier" | "veramo-issuer"
 
@@ -40,7 +41,7 @@ export interface VerifierTabConfig extends TabBase {
   kind: "verifier"
   defaultRequest: object
   presets?: Preset[]
-  startSession: (request: string) => Promise<VerifierSessionResult>
+  startSession: (request: string, linkForm: LinkForm) => Promise<VerifierSessionResult>
 }
 
 export interface IssuerModeConfig {

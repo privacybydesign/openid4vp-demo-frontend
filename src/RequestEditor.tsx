@@ -19,18 +19,21 @@ interface RequestEditorProps {
   subModes?: SubMode[]
   activeSubMode?: string
   onSubModeChange?: (id: string) => void
-  showLinkForm: boolean
   linkForm: LinkForm
   onLinkFormChange: (form: LinkForm) => void
   onChange: (value: string) => void
   onStart: () => void
 }
 
-const linkFormOptions: { id: LinkForm; label: string }[] = [
-  { id: "scheme", label: "Custom scheme" },
-  { id: "universal", label: "Universal link" },
-  { id: "universal-staging", label: "Universal link (staging)" },
-]
+// On the IRMA tab the default form runs the session through the yivi popup
+// instead of showing a scheme link.
+function linkFormOptions(activeTab: TabId): { id: LinkForm; label: string }[] {
+  return [
+    { id: "scheme", label: activeTab === "irma" ? "Yivi popup" : "Custom scheme" },
+    { id: "universal", label: "Universal link" },
+    { id: "universal-staging", label: "Universal link (staging)" },
+  ]
+}
 
 export default function RequestEditor({
   activeTab,
@@ -39,7 +42,6 @@ export default function RequestEditor({
   subModes,
   activeSubMode,
   onSubModeChange,
-  showLinkForm,
   linkForm,
   onLinkFormChange,
   onChange,
@@ -128,24 +130,22 @@ export default function RequestEditor({
             ))}
           </div>
         )}
-        {showLinkForm && (
-          <div className="flex flex-col gap-2" role="radiogroup" aria-label="Link form">
-            <span className="text-[15px] font-semibold text-[#484747] select-none">Link form</span>
-            {linkFormOptions.map((o) => (
-              <label key={o.id} className="flex items-center gap-1.5 text-[15px] text-[#484747] cursor-pointer select-none">
-                <input
-                  type="radio"
-                  name="link-form"
-                  value={o.id}
-                  checked={o.id === linkForm}
-                  onChange={() => onLinkFormChange(o.id)}
-                  className="accent-[#00508a]"
-                />
-                <span>{o.label}</span>
-              </label>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-col gap-2" role="radiogroup" aria-label="Link form">
+          <span className="text-[15px] font-semibold text-[#484747] select-none">Link form</span>
+          {linkFormOptions(activeTab).map((o) => (
+            <label key={o.id} className="flex items-center gap-1.5 text-[15px] text-[#484747] cursor-pointer select-none">
+              <input
+                type="radio"
+                name="link-form"
+                value={o.id}
+                checked={o.id === linkForm}
+                onChange={() => onLinkFormChange(o.id)}
+                className="accent-[#00508a]"
+              />
+              <span>{o.label}</span>
+            </label>
+          ))}
+        </div>
       </div>
       <div
         ref={editorRef}

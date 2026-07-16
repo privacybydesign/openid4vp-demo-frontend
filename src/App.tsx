@@ -107,7 +107,7 @@ function writeStateToUrl(tab: TabId, mode: IssuerMode, linkForm: LinkForm, reque
   if (tab === ISSUER_TAB) {
     params.set("mode", mode)
   }
-  if (tab !== "irma" && linkForm !== DEFAULT_LINK_FORM) {
+  if (linkForm !== DEFAULT_LINK_FORM) {
     params.set("link", linkForm)
   }
   if (!isDefault) {
@@ -134,7 +134,6 @@ function App() {
 
   const tab = tabs.find((t) => t.tab === activeTab)!
   const currentRequest = activeTab === ISSUER_TAB ? issuerRequest : requestPerTab[activeTab]
-  const showLinkFormToggle = activeTab !== "irma"
   const displayedLink = applyLinkForm(walletLink, linkForm, hostForLinkForm(linkForm))
 
   const updateUrl = useCallback(
@@ -231,7 +230,7 @@ function App() {
   const startSession = async () => {
     try {
       if (tab.kind === "verifier") {
-        const session = await tab.startSession(requestPerTab[activeTab])
+        const session = await tab.startSession(requestPerTab[activeTab], linkForm)
         await startVerifierSession(session)
       } else {
         const session = await tab.modes[activeMode].startSession(issuerRequest)
@@ -279,7 +278,6 @@ function App() {
             subModes={subModes}
             activeSubMode={tab.kind === "issuer" ? activeMode : undefined}
             onSubModeChange={(id) => switchMode(id as IssuerMode)}
-            showLinkForm={showLinkFormToggle}
             linkForm={linkForm}
             onLinkFormChange={switchLinkForm}
             onChange={changeRequest}

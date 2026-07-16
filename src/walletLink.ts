@@ -6,7 +6,15 @@ const UNIVERSAL_PATH_BY_SCHEME: Record<string, string> = {
   "openid-credential-offer:": "/-/openid-credential-offer",
 }
 
+// IRMA session links carry the session pointer in the path (scheme form) or
+// fragment (universal form), unlike the query-based openid4vp links.
+const IRMA_SCHEME_PREFIX = "irma://qr/json/"
+
 export function toUniversalLink(uri: string, host: string): string {
+  if (uri.startsWith(IRMA_SCHEME_PREFIX)) {
+    return `https://${host}/-/session#${uri.slice(IRMA_SCHEME_PREFIX.length)}`
+  }
+
   const schemeEnd = uri.indexOf("://")
   if (schemeEnd === -1) return uri
 
