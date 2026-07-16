@@ -32,3 +32,19 @@ export function toUniversalLink(uri: string, host: string): string {
 export function applyLinkForm(uri: string, form: LinkForm, host: string): string {
   return form === "scheme" ? uri : toUniversalLink(uri, host)
 }
+
+// A QR is by definition scanned from another device, so stamp
+// `continueOnSecondDevice: true` into the IRMA session payload for the QR
+// rendering only; tap-to-open links keep the wallet's same-device default.
+// No-op for query-based openid4vp / credential-offer links, which carry no
+// JSON payload.
+export function stampSecondDeviceForQr(uri: string): string {
+  const marker = "/-/session#"
+  const hash = uri.indexOf(marker)
+  if (hash === -1) return uri
+
+  const start = hash + marker.length
+  const payload = JSON.parse(decodeURIComponent(uri.slice(start)))
+  payload.continueOnSecondDevice = true
+  return uri.slice(0, start) + encodeURIComponent(JSON.stringify(payload))
+}

@@ -1,4 +1,5 @@
 import QRCodeComponent from "./QrCodeComponent"
+import { stampSecondDeviceForQr } from "./walletLink"
 import type { LinkForm } from "./walletLink"
 
 interface SessionPollerProps {
@@ -19,7 +20,7 @@ export default function SessionPoller({ walletLink, linkForm, onCancel }: Sessio
       <p className="text-sm text-[#484747]">Scan the QR code with the Yivi app or tap the button below.</p>
       <div className="flex flex-col gap-3 bg-white p-4 rounded-lg shadow-sm border border-[#CFE4EF]">
         <p className="text-xs text-[#484747] text-center">{linkFormLabel[linkForm]}</p>
-        <QRCodeComponent text={walletLink} />
+        <QRCodeComponent text={stampSecondDeviceForQr(walletLink)} />
         <button className="btn-primary w-full" onClick={() => (window.location.href = walletLink)}>
           Open Yivi
         </button>
