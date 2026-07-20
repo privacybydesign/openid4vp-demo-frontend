@@ -16,7 +16,9 @@ export function proxyConfigFromEnv(env) {
   return {
     verifierApiUrl: env.VERAMO_API_URL ?? "https://veramo-verifier.openid4vc.staging.yivi.app",
     verifierName: env.VERAMO_VERIFIER_NAME ?? "test-verifier",
+    didWebVerifierName: env.VERAMO_DIDWEB_VERIFIER_NAME ?? "didweb-verifier",
     verifierToken: env.VERAMO_ADMIN_TOKEN,
+    didWebVerifierToken: env.VERAMO_DIDWEB_ADMIN_TOKEN,
 
     issuerApiUrl: env.VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app",
     // Allow-list: the browser sends a stable key, never a raw upstream name.
@@ -36,6 +38,7 @@ export function proxyConfigFromEnv(env) {
 // Throws if a required admin token is missing. Call at startup to fail fast.
 export function assertProxyConfig(config) {
   if (!config.verifierToken) throw new Error("Missing required environment variable: VERAMO_ADMIN_TOKEN")
+  if (!config.didWebVerifierToken) throw new Error("Missing required environment variable: VERAMO_DIDWEB_ADMIN_TOKEN")
   if (!config.issuerToken) throw new Error("Missing required environment variable: VERAMO_ISSUER_ADMIN_TOKEN")
 }
 
@@ -78,6 +81,21 @@ export function mountApiProxy(app, config) {
   app.get("/api/verifier/offer/:state", (req, res) =>
     forward(res, `${config.verifierApiUrl}/${config.verifierName}/api/check-offer/${encodeURIComponent(req.params.state)}`, {
       headers: { Authorization: `Bearer ${config.verifierToken}` },
+    })
+  )
+
+  // --- did:web verifier -------------------------------------------------------------
+  app.post("/api/didweb-verifier/offer", rawJson, (req, res) =>
+    forward(res, `${config.verifierApiUrl}/${config.didWebVerifierName}/api/create-dcql-offer`, {
+      method: "POST",
+      headers: { ...jsonHeaders, Authorization: `Bearer ${config.didWebVerifierToken}` },
+      body: req.body,
+    })
+  )
+
+  app.get("/api/didweb-verifier/offer/:state", (req, res) =>
+    forward(res, `${config.verifierApiUrl}/${config.didWebVerifierName}/api/check-offer/${encodeURIComponent(req.params.state)}`, {
+      headers: { Authorization: `Bearer ${config.didWebVerifierToken}` },
     })
   )
 

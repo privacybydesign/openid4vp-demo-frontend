@@ -9,6 +9,7 @@ import type {
   IssuanceComplete,
   VerifierSessionResult,
   IssuerSessionResult,
+  ClientIdPrefix,
 } from "./tabs"
 import compactJson from "./compactJson"
 import TabBar from "./TabBar"
@@ -25,6 +26,8 @@ const UNIVERSAL_LINK_HOST = import.meta.env.VITE_UNIVERSAL_LINK_HOST || "open.yi
 const UNIVERSAL_LINK_HOST_STAGING = import.meta.env.VITE_UNIVERSAL_LINK_HOST_STAGING || "open.staging.yivi.app"
 const ALL_LINK_FORMS: LinkForm[] = ["scheme", "universal", "universal-staging"]
 const DEFAULT_LINK_FORM: LinkForm = "scheme"
+const ALL_CLIENT_ID_PREFIXES: ClientIdPrefix[] = ["did:jwk", "did:web"]
+const DEFAULT_CLIENT_ID_PREFIX: ClientIdPrefix = "did:jwk"
 
 function hostForLinkForm(form: LinkForm): string {
   return form === "universal-staging" ? UNIVERSAL_LINK_HOST_STAGING : UNIVERSAL_LINK_HOST
@@ -81,6 +84,7 @@ function readStateFromUrl(): {
   tab: TabId
   mode: IssuerMode
   linkForm: LinkForm
+  clientIdPrefix: ClientIdPrefix
   requestPerTab: Record<TabId, string>
 } {
   const params = new URLSearchParams(window.location.search)
@@ -99,6 +103,11 @@ function readStateFromUrl(): {
     ? (linkParam as LinkForm)
     : DEFAULT_LINK_FORM
 
+  const prefixParam = params.get("prefix")
+  const clientIdPrefix: ClientIdPrefix = ALL_CLIENT_ID_PREFIXES.includes(prefixParam as ClientIdPrefix)
+    ? (prefixParam as ClientIdPrefix)
+    : DEFAULT_CLIENT_ID_PREFIX
+
   const requestPerTab = { ...defaultRequestPerTab }
 
   const requestParam = params.get("request")
@@ -108,10 +117,16 @@ function readStateFromUrl(): {
     } catch { /* ignore invalid base64 */ }
   }
 
-  return { tab, mode, linkForm, requestPerTab }
+  return { tab, mode, linkForm, clientIdPrefix, requestPerTab }
 }
 
-function writeStateToUrl(tab: TabId, mode: IssuerMode, linkForm: LinkForm, request: string) {
+function writeStateToUrl(
+  tab: TabId,
+  mode: IssuerMode,
+  linkForm: LinkForm,
+  clientIdPrefix: ClientIdPrefix,
+  request: string
+) {
   const params = new URLSearchParams()
   params.set("tab", tab)
 
@@ -123,6 +138,9 @@ function writeStateToUrl(tab: TabId, mode: IssuerMode, linkForm: LinkForm, reque
   }
   if (linkForm !== DEFAULT_LINK_FORM) {
     params.set("link", linkForm)
+  }
+  if (tab === "veramo-verifier" && clientIdPrefix !== DEFAULT_CLIENT_ID_PREFIX) {
+    params.set("prefix", clientIdPrefix)
   }
   if (!isDefault) {
     params.set("request", btoa(request))
@@ -142,6 +160,7 @@ function App() {
   })
   const [activeMode, setActiveMode] = useState<IssuerMode>(initial.mode)
   const [linkForm, setLinkForm] = useState<LinkForm>(initial.linkForm)
+  const [clientIdPrefix, setClientIdPrefix] = useState<ClientIdPrefix>(initial.clientIdPrefix)
   const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
   const [walletResponse, setWalletResponse] = useState<DisclosureGroup[]>([])
@@ -164,17 +183,17 @@ function App() {
   const displayedLink = applyLinkForm(walletLink, linkForm, hostForLinkForm(linkForm))
 
   const updateUrl = useCallback(
-    (tab: TabId, mode: IssuerMode, linkForm: LinkForm, request: string) => {
-      writeStateToUrl(tab, mode, linkForm, request)
+    (tab: TabId, mode: IssuerMode, linkForm: LinkForm, clientIdPrefix: ClientIdPrefix, request: string) => {
+      writeStateToUrl(tab, mode, linkForm, clientIdPrefix, request)
     },
     []
   )
 
   useEffect(() => {
     if (frontendState === FrontendState.Pending) {
-      updateUrl(activeTab, activeMode, linkForm, currentRequest)
+      updateUrl(activeTab, activeMode, linkForm, clientIdPrefix, currentRequest)
     }
-  }, [activeTab, activeMode, linkForm, currentRequest, frontendState, updateUrl])
+  }, [activeTab, activeMode, linkForm, clientIdPrefix, currentRequest, frontendState, updateUrl])
 
   const switchTab = (next: TabId) => {
     if (frontendState !== FrontendState.Pending) return
@@ -194,6 +213,11 @@ function App() {
   const switchLinkForm = (next: LinkForm) => {
     if (frontendState !== FrontendState.Pending) return
     setLinkForm(next)
+  }
+
+  const switchClientIdPrefix = (next: ClientIdPrefix) => {
+    if (frontendState !== FrontendState.Pending) return
+    setClientIdPrefix(next)
   }
 
   const changeRequest = (value: string) => {
@@ -269,7 +293,7 @@ function App() {
   const startSession = async () => {
     try {
       if (tab.kind === "verifier") {
-        const session = await tab.startSession(currentRequest, linkForm)
+        const session = await tab.startSession(currentRequest, linkForm, clientIdPrefix)
         await startVerifierSession(session)
       } else {
         const session = await resolveMode(tab, activeMode).startSession(currentRequest)
@@ -314,6 +338,7 @@ function App() {
     ? issuerModes(tab).map((id) => ({ id, label: tab.modes[id]!.label }))
     : undefined
   const presets = tab.kind === "issuer" ? resolveMode(tab, activeMode).presets : tab.presets
+  const clientIdPrefixes = tab.kind === "verifier" ? tab.clientIdPrefixes : undefined
 
   return (
     <div className="h-full flex flex-col">
@@ -340,6 +365,9 @@ function App() {
             onSubModeChange={(id) => switchMode(id as IssuerMode)}
             linkForm={linkForm}
             onLinkFormChange={switchLinkForm}
+            clientIdPrefixes={clientIdPrefixes}
+            clientIdPrefix={clientIdPrefix}
+            onClientIdPrefixChange={switchClientIdPrefix}
             onChange={changeRequest}
             onStart={startSession}
           />

@@ -15,6 +15,8 @@ credential-free, same-origin routes to the SPA:
 | -------------------------- | -------------------------------------------------- |
 | `POST /api/verifier/offer` | `…/{verifier}/api/create-dcql-offer`               |
 | `GET  /api/verifier/offer/:state` | `…/{verifier}/api/check-offer/{state}`      |
+| `POST /api/did-webverifier/offer` | `…/{verifier}/api/create-dcql-offer`          |
+| `GET  /api/did-webverifier/offer/:state` | `…/{verifier}/api/check-offer/{state}` |
 | `POST /api/issuer/:key/offer`       | `…/{issuer}/api/create-offer`             |
 | `POST /api/issuer/:key/offer/check` | `…/{issuer}/api/check-offer`              |
 
@@ -62,15 +64,17 @@ override any of the following to point at a different environment.
 
 **Server-only** (no `VITE_` prefix — read by the BFF proxy, never sent to the browser):
 
-| Var                             | Used by                              |
-| ------------------------------- | ------------------------------------ |
-| `VERAMO_API_URL`                | Veramo verifier API                  |
-| `VERAMO_VERIFIER_NAME`          | Veramo verifier instance name        |
-| `VERAMO_ADMIN_TOKEN`            | Veramo verifier admin token (secret) |
-| `VERAMO_ISSUER_API_URL`         | Veramo issuer API                    |
-| `VERAMO_ISSUER_NAME`            | Issuer name for the `pre-auth` key   |
-| `VERAMO_AUTHCODE_ISSUER_NAME`   | Issuer name for the `authcode` key   |
-| `VERAMO_ISSUER_ADMIN_TOKEN`     | Veramo issuer admin token (secret)   |
+| Var                             | Used by                                 |
+| ------------------------------- | --------------------------------------- |
+| `VERAMO_API_URL`                | Veramo verifier API                     |
+| `VERAMO_VERIFIER_NAME`          | Veramo verifier instance name           |
+| `VERAMO_ADMIN_TOKEN`            | Veramo verifier admin token (secret)    |
+| `VERAMO_DIDWEB_VERIFIER_NAME`   | Veramo verifier instance name (did:web) |
+| `VERAMO_DIDWEB_ADMIN_TOKEN`     | Veramo verifier admin token (did:web)   |
+| `VERAMO_ISSUER_API_URL`         | Veramo issuer API                       |
+| `VERAMO_ISSUER_NAME`            | Issuer name for the `pre-auth` key      |
+| `VERAMO_AUTHCODE_ISSUER_NAME`   | Issuer name for the `authcode` key      |
+| `VERAMO_ISSUER_ADMIN_TOKEN`     | Veramo issuer admin token (secret)      |
 
 ## Build / lint
 
