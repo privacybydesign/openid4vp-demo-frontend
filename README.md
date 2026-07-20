@@ -36,8 +36,9 @@ following to point at a different environment:
 | --------------------------- | ------------------------------------ |
 | `VITE_API_URL`              | OpenID4VP verifier API (IRMA / EUDI) |
 | `VITE_VERAMO_API_URL`       | Veramo verifier API                  |
-| `VITE_VERAMO_VERIFIER_NAME` | Veramo verifier instance name        |
-| `VITE_VERAMO_ADMIN_TOKEN`   | Veramo verifier admin token          |
+| `VITE_VERAMO_VERIFIER_NAME` | Veramo verifier instance name (did:jwk) |
+| `VITE_VERAMO_ADMIN_TOKEN`   | Veramo verifier admin token (did:jwk)   |
+| `VITE_VERAMO_DIDWEB_VERIFIER_NAME` | Veramo verifier instance name (did:web) |
 | `VITE_IRMA_SERVER_URL`      | IRMA server (status / cancel)        |
 | `VITE_UNIVERSAL_LINK_HOST`  | Host for OpenID4VC universal links (default `open.yivi.app`) |
 

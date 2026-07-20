@@ -3,7 +3,7 @@ import { EditorView, basicSetup } from "codemirror"
 import { json } from "@codemirror/lang-json"
 import { catppuccinLatte } from "@catppuccin/codemirror"
 import { EditorState } from "@codemirror/state"
-import type { Preset, TabId } from "./tabs"
+import type { ClientIdPrefix, Preset, TabId } from "./tabs"
 import type { LinkForm } from "./walletLink"
 import compactJson from "./compactJson"
 
@@ -21,6 +21,9 @@ interface RequestEditorProps {
   onSubModeChange?: (id: string) => void
   linkForm: LinkForm
   onLinkFormChange: (form: LinkForm) => void
+  clientIdPrefixes?: ClientIdPrefix[]
+  clientIdPrefix: ClientIdPrefix
+  onClientIdPrefixChange: (prefix: ClientIdPrefix) => void
   onChange: (value: string) => void
   onStart: () => void
 }
@@ -44,6 +47,9 @@ export default function RequestEditor({
   onSubModeChange,
   linkForm,
   onLinkFormChange,
+  clientIdPrefixes,
+  clientIdPrefix,
+  onClientIdPrefixChange,
   onChange,
   onStart,
 }: RequestEditorProps) {
@@ -146,6 +152,24 @@ export default function RequestEditor({
             </label>
           ))}
         </div>
+        {clientIdPrefixes && (
+          <div className="flex flex-col gap-2" role="radiogroup" aria-label="Client Identifier Prefix">
+            <span className="text-[15px] font-semibold text-[#484747] select-none">Client Identifier Prefix</span>
+            {clientIdPrefixes.map((p) => (
+              <label key={p} className="flex items-center gap-1.5 text-[15px] text-[#484747] cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="client-id-prefix"
+                  value={p}
+                  checked={p === clientIdPrefix}
+                  onChange={() => onClientIdPrefixChange(p)}
+                  className="accent-[#00508a]"
+                />
+                <span>{p}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
       <div
         ref={editorRef}

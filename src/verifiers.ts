@@ -1,6 +1,6 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
 import type { SessionPtr } from "@privacybydesign/yivi-frontend"
-import type { DisclosureContent, Preset, VerifierSessionResult, VerifierTabConfig } from "./tabs"
+import type { ClientIdPrefix, DisclosureContent, Preset, VerifierSessionResult, VerifierTabConfig } from "./tabs"
 import type { LinkForm } from "./walletLink"
 import { requireEnv } from "./env"
 
@@ -346,12 +346,14 @@ export const eudiVerifier: VerifierTabConfig = {
 }
 
 // ---------------------------------------------------------------------------
-// Veramo verifier
+// Veramo verifiers (did:jwk + did:web)
 // ---------------------------------------------------------------------------
 
 const VERAMO_API_URL = import.meta.env.VITE_VERAMO_API_URL ?? "https://veramo-verifier.openid4vc.staging.yivi.app"
 const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-verifier"
 const VERAMO_ADMIN_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ADMIN_TOKEN, "VITE_VERAMO_ADMIN_TOKEN")
+const VERAMO_DIDWEB_VERIFIER_NAME = import.meta.env.VITE_VERAMO_DIDWEB_VERIFIER_NAME ?? "didweb-verifier"
+const VERAMO_DIDWEB_ADMIN_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_DIDWEB_ADMIN_TOKEN, "VITE_VERAMO_DIDWEB_ADMIN_TOKEN")
 
 const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
 
@@ -587,18 +589,33 @@ const veramoPresets: Preset[] = [
   },
 ]
 
+// The did:jwk verifier and did:web verifier are separate Veramo instances
+// (different admin token), selected via the "Client Identifier Prefix" radio
+// group.
+function veramoVerifierNameFor(clientIdPrefix: ClientIdPrefix): string {
+  return clientIdPrefix === "did:web" ? VERAMO_DIDWEB_VERIFIER_NAME : VERAMO_VERIFIER_NAME
+}
+
+function veramoAdminTokenFor(clientIdPrefix: ClientIdPrefix): string {
+  return clientIdPrefix === "did:web" ? VERAMO_DIDWEB_ADMIN_TOKEN : VERAMO_ADMIN_TOKEN
+}
+
 export const veramoVerifier: VerifierTabConfig = {
   kind: "verifier",
   tab: "veramo-verifier",
   label: "Veramo Verifier",
   defaultRequest: veramoPresets[0].request,
   presets: veramoPresets,
-  startSession: async (request: string) => {
-    const response = await fetch(`${VERAMO_API_URL}/${VERAMO_VERIFIER_NAME}/api/create-dcql-offer`, {
+  clientIdPrefixes: ["did:jwk", "did:web"],
+  startSession: async (request: string, _linkForm: LinkForm, clientIdPrefix: ClientIdPrefix) => {
+    const verifierName = veramoVerifierNameFor(clientIdPrefix)
+    const adminToken = veramoAdminTokenFor(clientIdPrefix)
+
+    const response = await fetch(`${VERAMO_API_URL}/${verifierName}/api/create-dcql-offer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${VERAMO_ADMIN_TOKEN}`,
+        Authorization: `Bearer ${adminToken}`,
       },
       body: request,
     })
@@ -617,8 +634,8 @@ export const veramoVerifier: VerifierTabConfig = {
     return {
       walletLink: json.requestUri,
       poll: async () => {
-        const result = await fetch(`${VERAMO_API_URL}/${VERAMO_VERIFIER_NAME}/api/check-offer/${state}`, {
-          headers: { Authorization: `Bearer ${VERAMO_ADMIN_TOKEN}` },
+        const result = await fetch(`${VERAMO_API_URL}/${verifierName}/api/check-offer/${state}`, {
+          headers: { Authorization: `Bearer ${adminToken}` },
         })
         if (result.status !== 200) return null
 
