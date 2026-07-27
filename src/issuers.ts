@@ -14,7 +14,9 @@ const credentialDisplayNames: Record<string, string> = {
   MembershipCredentialSdJwt: "Membership Credential (SD-JWT)",
   EduIdCredentialSdJwt: "eduID",
   OrganizationCredentialSdJwt: "Organization Credential (SD-JWT)",
-  [REVOCABLE_CREDENTIAL]: "Status List Credential (SD-JWT)",
+  // Same wording as the presets below and the README, so that issuing the
+  // "(revocable)" preset does not report back a differently named credential.
+  [REVOCABLE_CREDENTIAL]: "Status List Credential (revocable)",
 }
 
 function displayNameFor(credentialId: string): string {

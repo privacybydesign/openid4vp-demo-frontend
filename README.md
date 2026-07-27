@@ -6,24 +6,25 @@ tabs).
 
 ## Revocation
 
-The **Revocation** tab lists the credentials the Veramo issuer has issued and
+The `Revocation` tab lists the credentials the Veramo issuer has issued and
 revokes or unrevokes them against the status list agent.
 
 Only `StatusListCredentialSdJwt` can be revoked: it is the single credential
 type `test-issuer.json` declares a `statusLists` block for, so it is the only
-one that gets a status list entry at issuance. Issue one from the **Veramo
-Issuer** tab with the *Status List Credential (revocable)* preset
-(pre-authorized-code mode only — `authcode-issuer` has no status list config).
+one that gets a status list entry at issuance. Issue one from the
+`Veramo Issuer` tab with the `Status List Credential (revocable)` preset. That
+preset only exists in pre-authorized-code mode, because `authcode-issuer` has
+no status list config.
 
 Revoking flips a bit on a published list. It does not touch the holder's copy,
-which stays cryptographically valid and will still present successfully — the
-**Veramo Verifier** tab shows the difference as a `STATUS_LIST_REVOKED` warning
+which stays cryptographically valid and will still present successfully. The
+`Veramo Verifier` tab shows the difference as a `STATUS_LIST_REVOKED` warning
 above the disclosure table, not as a failure.
 
-> **The verifier caches status lists for 60 minutes.** After revoking, the
-> Veramo Verifier tab can keep reporting the credential valid for up to an
-> hour. Revoke *before* the first presentation, or restart the
-> `veramo-verifier` pod between presentations. The Revocation tab is
+> The verifier caches status lists for 60 minutes. After revoking, the
+> `Veramo Verifier` tab can keep reporting the credential valid for up to an
+> hour. Revoke before the first presentation, or restart the
+> `veramo-verifier` pod between presentations. The `Revocation` tab is
 > unaffected: it reads the status list agent directly.
 
 ## Running
@@ -69,9 +70,13 @@ issuer endpoints. Override `VITE_VERAMO_ISSUER_API_URL`,
 `VITE_VERAMO_ISSUER_NAME`, or `VITE_VERAMO_ISSUER_ADMIN_TOKEN` if you need to
 target a different issuer.
 
-## Build / lint
+## Build / lint / test
 
 ```sh
 npm run build   # tsc -b && vite build
 npm run lint
+npm test        # vitest run
 ```
+
+Run these before pushing. The `Status checks` workflow only builds the Docker
+image, so a lint error or a failing test still shows up as a green PR.
