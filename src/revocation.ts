@@ -3,8 +3,7 @@
 // Listing comes from the issuer, but the current revocation state does NOT:
 // Issuer.listCredentials omits the `status` column from its SELECT, so the
 // listing cannot say whether a credential is revoked. Each row's bit is read
-// straight from the status list agent instead. See
-// docs/adr/0001-revocation-state-from-statuslist-agent.md.
+// straight from the status list agent instead.
 import { ISSUER_BASE, ISSUER_TOKEN, PRE_AUTH_ISSUER_NAME, issuerAuthHeaders } from "./veramoIssuer"
 
 // The only credential type test-issuer.json declares a `statusLists` block for,
@@ -77,9 +76,30 @@ export function entryFor(row: CredentialRow): StatusListEntry | null {
 //
 //   "https://statuslist.<host>/statuslist/1"
 //     -> "https://statuslist.<host>/statuslist/api/status/1/73124"
+//
+// A trailing slash on the stored URL is tolerated: without that, a
+// ".../statuslist/1/" would keep its separator and produce a doubled slash.
 export function statusUrlFor(entry: StatusListEntry): string {
-  const listBase = entry.credentialStatus.uri.replace(/\/\d+$/, "")
+  const listBase = entry.credentialStatus.uri.replace(/\/+\d+\/*$/, "")
   return `${listBase}/api/status/${entry.list}/${entry.index}`
+}
+
+// Applies a patch to the row for `uuid`. Keyed on the uuid rather than on the
+// position, because a toggle that finishes after a refresh would otherwise
+// write its result onto whichever credential now sits at that index: load()
+// replaces the list wholesale, and one newly issued credential shifts every
+// index by one. The uuid column is nullable, so a row without one still falls
+// back to the position it was rendered at, which also keeps two empty-uuid
+// rows from updating together.
+export function patchRow<T extends { uuid: string }>(
+  rows: T[],
+  index: number,
+  uuid: string,
+  patch: Partial<T>
+): T[] {
+  return rows.map((row, i) =>
+    (uuid ? row.uuid === uuid : i === index) ? { ...row, ...patch } : row
+  )
 }
 
 export async function listRevocableCredentials(): Promise<CredentialRow[]> {
