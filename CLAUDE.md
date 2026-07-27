@@ -12,8 +12,10 @@ warning in `src/RequestEditor.tsx`.
 `npm test` runs vitest. Its config is `vitest.config.ts`, kept separate from
 `vite.config.ts` so the app build never resolves vitest. That config stubs
 `VITE_VERAMO_ISSUER_ADMIN_TOKEN`, because `src/veramoIssuer.ts` calls
-`requireEnv` at import time and most modules import it transitively. Any new
-build step needs a placeholder for that variable too, or `vite build` throws.
+`requireEnv` at import time and most modules import it transitively. `vite build`
+needs no such placeholder: Vite replaces `import.meta.env.VITE_*` statically and
+never evaluates the module, so a missing token fails at page load in the browser
+rather than in the build.
 
 Most tests are plain logic tests on `.ts` modules and need no DOM. A component
 test needs jsdom, which vitest does not switch on by default. Put
