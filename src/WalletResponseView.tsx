@@ -45,7 +45,7 @@ export default function WalletResponseView({
       {warnings.length > 0 && (
         <div
           role="alert"
-          className="w-full bg-[#fff4e0] border border-[#e6a400] text-[#7a4f00] px-4 py-3 rounded-md text-sm"
+          className="w-full bg-[var(--yivi-warning-bg)] border border-[var(--yivi-warning-border)] text-[var(--yivi-warning-text)] px-4 py-3 rounded-md text-sm"
         >
           <ul className="list-none m-0 p-0 flex flex-col gap-1">
             {warnings.map((m, i) => (
@@ -77,7 +77,7 @@ export default function WalletResponseView({
       </div>
 
       {infos.length > 0 && (
-        <ul className="list-none m-0 p-0 w-full flex flex-col gap-1 text-xs text-[#8a8a8a]">
+        <ul className="list-none m-0 p-0 w-full flex flex-col gap-1 text-xs text-[var(--yivi-anthracite)]">
           {infos.map((m, i) => (
             <li key={i}>{labelFor(m)}</li>
           ))}

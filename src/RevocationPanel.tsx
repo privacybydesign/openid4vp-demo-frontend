@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import {
   entryFor,
   listRevocableCredentials,
+  patchRow,
   readRevoked,
   setRevoked,
   REVOCABLE_CREDENTIAL,
@@ -54,46 +55,61 @@ async function loadRow(row: CredentialRow): Promise<Row> {
   }
 }
 
+async function fetchRows(): Promise<Row[]> {
+  const credentials = await listRevocableCredentials()
+  return Promise.all(credentials.map(loadRow))
+}
+
 export default function RevocationPanel() {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
-  const load = useCallback(async () => {
+  // The state handoff is a .then callback rather than an await:
+  // react-hooks/set-state-in-effect rejects every setState a mount effect can
+  // reach by calling a function directly, whether or not it sits behind an
+  // await. So load() itself sets nothing, `loading` starts at true for the
+  // mount path, and refresh() below carries what the button needs to set
+  // before the request goes out.
+  const load = useCallback(
+    () =>
+      fetchRows()
+        .then((next) => {
+          setRows(next)
+          setError("")
+        })
+        .catch((cause: unknown) => {
+          setRows([])
+          setError(errorText(cause))
+        })
+        .finally(() => setLoading(false)),
+    []
+  )
+
+  const refresh = () => {
     setLoading(true)
     setError("")
-    try {
-      const credentials = await listRevocableCredentials()
-      setRows(await Promise.all(credentials.map(loadRow)))
-    } catch (error) {
-      setError(errorText(error))
-      setRows([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+    void load()
+  }
 
   useEffect(() => {
     void load()
   }, [load])
 
-  // Matched on position rather than uuid: the column is nullable, and two rows
-  // with an empty uuid would otherwise update together. Rows are only replaced
-  // wholesale by load(), so the index is stable.
-  const updateRow = (index: number, patch: Partial<Row>) =>
-    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)))
+  const updateRow = (uuid: string, index: number, patch: Partial<Row>) =>
+    setRows((prev) => patchRow(prev, index, uuid, patch))
 
   const toggle = async (row: Row, index: number) => {
     if (!row.entry) return
     const revoke = !row.revoked
-    updateRow(index, { busy: true, error: undefined })
+    updateRow(row.uuid, index, { busy: true, error: undefined })
     try {
       await setRevoked(row.uuid, revoke)
       // Re-read the bit rather than trusting the issuer's answer: it reports a
       // failed write as HTTP 200 UNKNOWN, and this also catches the case where
       // it claims REVOKED but the bit never moved.
       const actual = await readRevoked(row.entry)
-      updateRow(index, {
+      updateRow(row.uuid, index, {
         busy: false,
         revoked: actual,
         error:
@@ -104,7 +120,7 @@ export default function RevocationPanel() {
               }.`,
       })
     } catch (error) {
-      updateRow(index, { busy: false, error: errorText(error) })
+      updateRow(row.uuid, index, { busy: false, error: errorText(error) })
     }
   }
 
@@ -115,7 +131,7 @@ export default function RevocationPanel() {
           Credentials issued as <span className="font-semibold">{REVOCABLE_CREDENTIAL}</span>, newest
           first.
         </p>
-        <button className="btn-secondary shrink-0" onClick={() => void load()} disabled={loading}>
+        <button className="btn-secondary shrink-0" onClick={refresh} disabled={loading}>
           {loading ? "Loading…" : "Refresh"}
         </button>
       </div>
@@ -185,15 +201,23 @@ export default function RevocationPanel() {
   )
 }
 
+// "Unknown" means the status list read failed, so it must not borrow the
+// colour of "Not revoked": on this screen the safe-looking green would be
+// claiming the opposite of what is known.
+function statusClass(revoked: boolean | null): string {
+  if (revoked === null) return "text-[var(--yivi-warning-text)]"
+  return revoked ? "text-[#d0021b]" : "text-[var(--yivi-green-text)]"
+}
+
 function StatusCell({ row }: { row: Row }) {
   // No status list entry at all — the credential type had no `statusLists`
   // block configured when it was issued, so there is nothing to revoke.
   if (!row.entry) {
-    return <span className="text-[#8a8a8a]">— no status list</span>
+    return <span className="text-[var(--yivi-anthracite)]">— no status list</span>
   }
   return (
     <div className="flex flex-col gap-1">
-      <span className={row.revoked ? "text-[#d0021b] font-semibold" : "text-[#00973a] font-semibold"}>
+      <span className={`${statusClass(row.revoked)} font-semibold`}>
         {row.revoked === null ? "Unknown" : row.revoked ? "Revoked" : "Not revoked"}
       </span>
       {row.error && (
