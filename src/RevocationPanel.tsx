@@ -167,7 +167,16 @@ export default function RevocationPanel() {
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr key={index} className="border-b border-[#CFE4EF] last:border-b-0 align-top">
+                // Keyed on the uuid for the same reason patchRow is: the
+                // listing is newest-first, so one newly issued credential
+                // prepends and shifts every row. With index keys React would
+                // reconcile by position, leaving the focused Revoke button
+                // sitting in another credential's row. Index stays as the
+                // fallback for the nullable uuid column.
+                <tr
+                  key={row.uuid || index}
+                  className="border-b border-[#CFE4EF] last:border-b-0 align-top"
+                >
                   <td className="px-4 py-3 text-[#484747] whitespace-nowrap">
                     {formatIssued(row.issuanceDate)}
                   </td>
