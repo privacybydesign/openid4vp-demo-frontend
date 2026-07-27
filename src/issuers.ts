@@ -1,10 +1,11 @@
 import type { IssuerTabConfig, IssuerModeConfig, IssuerSessionResult, Preset } from "./tabs"
-import { requireEnv } from "./env"
-
-const ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
-const PRE_AUTH_ISSUER_NAME = import.meta.env.VITE_VERAMO_ISSUER_NAME ?? "test-issuer"
-const AUTH_CODE_ISSUER_NAME = import.meta.env.VITE_VERAMO_AUTHCODE_ISSUER_NAME ?? "authcode-issuer"
-const ISSUER_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ISSUER_ADMIN_TOKEN, "VITE_VERAMO_ISSUER_ADMIN_TOKEN")
+import { REVOCABLE_CREDENTIAL } from "./revocation"
+import {
+  AUTH_CODE_ISSUER_NAME,
+  ISSUER_BASE,
+  PRE_AUTH_ISSUER_NAME,
+  issuerAuthHeaders,
+} from "./veramoIssuer"
 
 const credentialDisplayNames: Record<string, string> = {
   EmailCredentialSdJwt: "Email Credential (SD-JWT)",
@@ -13,6 +14,7 @@ const credentialDisplayNames: Record<string, string> = {
   MembershipCredentialSdJwt: "Membership Credential (SD-JWT)",
   EduIdCredentialSdJwt: "eduID",
   OrganizationCredentialSdJwt: "Organization Credential (SD-JWT)",
+  [REVOCABLE_CREDENTIAL]: "Status List Credential (SD-JWT)",
 }
 
 function displayNameFor(credentialId: string): string {
@@ -98,6 +100,14 @@ const credentialDataByCredential: Record<string, object> = {
       },
     ],
   },
+  // Claims per conf/vct/statuslist-vct.json. The only credential type
+  // test-issuer declares a `statusLists` block for, so the only one that can
+  // ever be revoked — see the Revocation tab.
+  [REVOCABLE_CREDENTIAL]: {
+    given_name: "Alice",
+    family_name: "de Vries",
+    email: "alice@example.com",
+  },
 }
 
 interface PresetSpec {
@@ -134,10 +144,24 @@ function authCodeOfferRequest(credentialId: string): object {
   }
 }
 
-const preAuthPresets: Preset[] = presetOrder.flatMap(({ credentialId, label }) => [
-  { label, request: preAuthOfferRequest(credentialId, false) },
-  { label: `${label} (tx_code)`, request: preAuthOfferRequest(credentialId, true) },
-])
+// Deliberately appended here rather than added to presetOrder: the status list
+// credential exists only in test-issuer's metadata, and authcode-issuer has no
+// `statusLists` block, so offering it in authorization-code mode would issue
+// something that can never be revoked.
+const preAuthPresets: Preset[] = [
+  ...presetOrder.flatMap(({ credentialId, label }) => [
+    { label, request: preAuthOfferRequest(credentialId, false) },
+    { label: `${label} (tx_code)`, request: preAuthOfferRequest(credentialId, true) },
+  ]),
+  {
+    label: "Status List Credential (revocable)",
+    request: preAuthOfferRequest(REVOCABLE_CREDENTIAL, false),
+  },
+  {
+    label: "Status List Credential (revocable, tx_code)",
+    request: preAuthOfferRequest(REVOCABLE_CREDENTIAL, true),
+  },
+]
 
 const authCodePresets: Preset[] = presetOrder.map(({ credentialId, label }) => ({
   label,
@@ -148,10 +172,7 @@ function startSessionFor(issuerName: string) {
   return async (request: string): Promise<IssuerSessionResult> => {
     const response = await fetch(`${ISSUER_BASE}/${issuerName}/api/create-offer`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${ISSUER_TOKEN}`,
-      },
+      headers: issuerAuthHeaders(),
       body: request,
     })
     if (!response.ok) {
@@ -174,10 +195,7 @@ function startSessionFor(issuerName: string) {
       poll: async () => {
         const result = await fetch(`${ISSUER_BASE}/${issuerName}/api/check-offer`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${ISSUER_TOKEN}`,
-          },
+          headers: issuerAuthHeaders(),
           body: JSON.stringify({ id: json.id }),
         })
         if (result.status !== 200) return null

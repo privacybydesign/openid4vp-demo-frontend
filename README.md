@@ -1,7 +1,30 @@
 # openid4vp-demo-frontend
 
 A small Vite + React tool for exercising the Yivi verifier and Veramo
-verifier/issuer flows (IRMA, EUDI, Veramo Verifier, Veramo Issuer tabs).
+verifier/issuer flows (IRMA, EUDI, Veramo Verifier, Veramo Issuer, Revocation
+tabs).
+
+## Revocation
+
+The **Revocation** tab lists the credentials the Veramo issuer has issued and
+revokes or unrevokes them against the status list agent.
+
+Only `StatusListCredentialSdJwt` can be revoked: it is the single credential
+type `test-issuer.json` declares a `statusLists` block for, so it is the only
+one that gets a status list entry at issuance. Issue one from the **Veramo
+Issuer** tab with the *Status List Credential (revocable)* preset
+(pre-authorized-code mode only — `authcode-issuer` has no status list config).
+
+Revoking flips a bit on a published list. It does not touch the holder's copy,
+which stays cryptographically valid and will still present successfully — the
+**Veramo Verifier** tab shows the difference as a `STATUS_LIST_REVOKED` warning
+above the disclosure table, not as a failure.
+
+> **The verifier caches status lists for 60 minutes.** After revoking, the
+> Veramo Verifier tab can keep reporting the credential valid for up to an
+> hour. Revoke *before* the first presentation, or restart the
+> `veramo-verifier` pod between presentations. The Revocation tab is
+> unaffected: it reads the status list agent directly.
 
 ## Running
 
