@@ -3,6 +3,7 @@ import type { SessionPtr } from "@privacybydesign/yivi-frontend"
 import type { DisclosureContent, Preset, VerifierSessionResult, VerifierTabConfig } from "./tabs"
 import type { LinkForm } from "./walletLink"
 import { requireEnv } from "./env"
+import { ISSUER_BASE } from "./veramoIssuer"
 
 function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   const components = sdjwt.split("~")
@@ -339,7 +340,9 @@ export const eudiVerifier: VerifierTabConfig = {
 
         const response = await result.json()
         const entries = new Map<string, string[]>(Object.entries(response["vp_token"]))
-        return Array.from(entries.values(), (sdjwts) => sdjwts.map(parseSdJwtVc).flat())
+        return {
+          disclosures: Array.from(entries.values(), (sdjwts) => sdjwts.map(parseSdJwtVc).flat()),
+        }
       },
     }
   },
@@ -353,15 +356,13 @@ const VERAMO_API_URL = import.meta.env.VITE_VERAMO_API_URL ?? "https://veramo-ve
 const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-verifier"
 const VERAMO_ADMIN_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ADMIN_TOKEN, "VITE_VERAMO_ADMIN_TOKEN")
 
-const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
-
 // Shape of a single credential in a Veramo check-offer response.
 interface VeramoCredential {
   claims: Record<string, unknown>
 }
 
 function veramoVct(name: string): string {
-  return `${VERAMO_ISSUER_BASE}/vct/${name}`
+  return `${ISSUER_BASE}/vct/${name}`
 }
 
 function veramoDcqlRequest(credential: object): object {
@@ -626,16 +627,21 @@ export const veramoVerifier: VerifierTabConfig = {
         if (response.status !== "VERIFIED" && response.status !== "RESPONSE_RECEIVED") return null
 
         const credentials: Record<string, VeramoCredential[]> = response.result?.credentials ?? {}
-        return Object.values(credentials).map((creds) =>
-          creds
-            .map((cred) =>
-              Object.entries(cred.claims).map(([key, value]) => ({
-                key,
-                value: String(value),
-              }))
-            )
-            .flat()
-        )
+        return {
+          disclosures: Object.values(credentials).map((creds) =>
+            creds
+              .map((cred) =>
+                Object.entries(cred.claims).map(([key, value]) => ({
+                  key,
+                  value: String(value),
+                }))
+              )
+              .flat()
+          ),
+          // Revocation is reported here, not in `status`: a revoked credential
+          // still verifies and the session still reaches VERIFIED.
+          messages: response.result?.messages,
+        }
       },
     }
   },
@@ -803,7 +809,7 @@ async function startIrmaSessionWithLink(request: string): Promise<VerifierSessio
         throw new Error(`IRMA session ${result.status.toLowerCase()}`)
       }
       if (result.status !== "DONE") return null
-      return parseIrmaResult(result)
+      return { disclosures: parseIrmaResult(result) }
     },
   }
 }

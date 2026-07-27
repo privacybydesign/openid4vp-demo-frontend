@@ -22,6 +22,13 @@
   --yivi-light-blue: #CFE4EF;
   --yivi-bg: #F7F5F3;
   --yivi-white: #FFFFFF;
+  /* --yivi-green is 3.83:1 on white: fine behind white text, too light for
+     text itself. This darker green is the AA-passing variant, at 5.49:1. */
+  --yivi-green-text: #007a2f;
+  /* Warning strip: #7a4f00 on #fff4e0 is 6.54:1, and 7.13:1 on white. */
+  --yivi-warning-bg: #fff4e0;
+  --yivi-warning-border: #e6a400;
+  --yivi-warning-text: #7a4f00;
 }
 
 html, body {

@@ -6,6 +6,7 @@ import type {
   IssuerMode,
   DisclosureContent,
   IssuanceComplete,
+  VerifierMessage,
   VerifierSessionResult,
   IssuerSessionResult,
 } from "./tabs"
@@ -16,6 +17,7 @@ import SessionPoller from "./SessionPoller"
 import WalletResponseView from "./WalletResponseView"
 import IssuerSessionPoller from "./IssuerSessionPoller"
 import IssuanceCompleteView from "./IssuanceCompleteView"
+import RevocationPanel from "./RevocationPanel"
 import ErrorView from "./ErrorView"
 import { applyLinkForm } from "./walletLink"
 import type { LinkForm } from "./walletLink"
@@ -38,10 +40,15 @@ const FrontendState = {
 type FrontendState = typeof FrontendState[keyof typeof FrontendState]
 
 const ISSUER_TAB: TabId = "veramo-issuer"
+const REVOCATION_TAB: TabId = "revocation"
 const ALL_ISSUER_MODES: IssuerMode[] = ["pre-authorized-code", "authorization-code"]
 
 function defaultRequestFor(tabId: TabId, mode: IssuerMode | null): string {
   const tab = tabs.find((t) => t.tab === tabId)!
+  if (tab.kind === "revocation") {
+    // No request editor on this tab; nothing to default.
+    return ""
+  }
   if (tab.kind === "issuer") {
     const modeId = mode ?? tab.defaultMode
     return compactJson(tab.modes[modeId].defaultRequest)
@@ -102,6 +109,12 @@ function writeStateToUrl(tab: TabId, mode: IssuerMode, linkForm: LinkForm, reque
   const params = new URLSearchParams()
   params.set("tab", tab)
 
+  // The revocation tab has no request, mode or wallet link to preserve.
+  if (tab === REVOCATION_TAB) {
+    window.history.replaceState(null, "", `?${params}`)
+    return
+  }
+
   const defaultRequest = tab === ISSUER_TAB ? DEFAULT_ISSUER_REQUEST : defaultRequestFor(tab, null)
   const isDefault = request === defaultRequest
   if (tab === ISSUER_TAB) {
@@ -125,6 +138,7 @@ function App() {
   const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
   const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
+  const [verifierMessages, setVerifierMessages] = useState<VerifierMessage[]>([])
   const [issuanceResult, setIssuanceResult] = useState<IssuanceComplete | null>(null)
   const [walletLink, setWalletLink] = useState("")
   const [txCode, setTxCode] = useState<string | undefined>(undefined)
@@ -181,6 +195,7 @@ function App() {
   const startVerifierSession = async (session: VerifierSessionResult) => {
     if (session.disclosures) {
       setWalletResponse(session.disclosures)
+      setVerifierMessages([])
       setFrontendState(FrontendState.Done)
       return
     }
@@ -193,7 +208,8 @@ function App() {
         const result = await session.poll!()
         if (result) {
           clearInterval(id)
-          setWalletResponse(result)
+          setWalletResponse(result.disclosures)
+          setVerifierMessages(result.messages ?? [])
           setFrontendState(FrontendState.Done)
         }
       } catch (error) {
@@ -228,6 +244,8 @@ function App() {
   }
 
   const startSession = async () => {
+    // The revocation tab has no session; it never renders the start button.
+    if (tab.kind === "revocation") return
     try {
       if (tab.kind === "verifier") {
         const session = await tab.startSession(requestPerTab[activeTab], linkForm)
@@ -252,13 +270,19 @@ function App() {
     setFrontendState(FrontendState.Pending)
     setTxCode(undefined)
     setIssuanceResult(null)
+    setVerifierMessages([])
     setErrorMessage("")
   }
 
   const subModes = tab.kind === "issuer"
     ? ALL_ISSUER_MODES.map((id) => ({ id, label: tab.modes[id].label }))
     : undefined
-  const presets = tab.kind === "issuer" ? tab.modes[activeMode].presets : tab.presets
+  const presets =
+    tab.kind === "issuer"
+      ? tab.modes[activeMode].presets
+      : tab.kind === "verifier"
+        ? tab.presets
+        : undefined
 
   return (
     <div className="h-full flex flex-col">
@@ -270,7 +294,11 @@ function App() {
       <div className="flex-1 flex flex-col items-center w-full px-3 py-4 md:px-6 md:py-6 overflow-y-auto md:overflow-hidden">
         <TabBar tabs={tabs} activeTab={activeTab} onSwitch={switchTab} />
 
-        {frontendState === FrontendState.Pending && (
+        {/* The revocation tab is not a session, so it bypasses the
+            Pending/Polling/Done machine entirely and owns its own state. */}
+        {tab.kind === "revocation" && <RevocationPanel />}
+
+        {tab.kind !== "revocation" && frontendState === FrontendState.Pending && (
           <RequestEditor
             activeTab={activeTab}
             defaultValue={currentRequest}
@@ -294,14 +322,18 @@ function App() {
         )}
 
         {frontendState === FrontendState.Done && tab.kind === "verifier" && (
-          <WalletResponseView disclosures={walletResponse} onReset={reset} />
+          <WalletResponseView
+            disclosures={walletResponse}
+            messages={verifierMessages}
+            onReset={reset}
+          />
         )}
 
         {frontendState === FrontendState.Done && tab.kind === "issuer" && issuanceResult && (
           <IssuanceCompleteView credentialName={issuanceResult.credentialName} onReset={reset} />
         )}
 
-        {frontendState === FrontendState.Error && (
+        {tab.kind !== "revocation" && frontendState === FrontendState.Error && (
           <ErrorView message={errorMessage} onReset={reset} />
         )}
       </div>
