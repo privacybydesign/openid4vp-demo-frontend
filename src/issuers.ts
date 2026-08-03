@@ -1,10 +1,10 @@
 import type { IssuerTabConfig, IssuerModeConfig, IssuerSessionResult, Preset } from "./tabs"
-import { requireEnv } from "./env"
 
-const ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
-const PRE_AUTH_ISSUER_NAME = import.meta.env.VITE_VERAMO_ISSUER_NAME ?? "test-issuer"
-const AUTH_CODE_ISSUER_NAME = import.meta.env.VITE_VERAMO_AUTHCODE_ISSUER_NAME ?? "authcode-issuer"
-const ISSUER_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ISSUER_ADMIN_TOKEN, "VITE_VERAMO_ISSUER_ADMIN_TOKEN")
+// The issuer admin token and the real upstream issuer names live on the backend
+// proxy (see server.js). The browser addresses issuers by an allow-listed key
+// that the proxy maps to a concrete issuer name.
+const PRE_AUTH_ISSUER_KEY = "pre-auth"
+const AUTH_CODE_ISSUER_KEY = "authcode"
 
 const credentialDisplayNames: Record<string, string> = {
   EmailCredentialSdJwt: "Email Credential (SD-JWT)",
@@ -144,13 +144,12 @@ const authCodePresets: Preset[] = presetOrder.map(({ credentialId, label }) => (
   request: authCodeOfferRequest(credentialId),
 }))
 
-function startSessionFor(issuerName: string) {
+function startSessionFor(issuerKey: string) {
   return async (request: string): Promise<IssuerSessionResult> => {
-    const response = await fetch(`${ISSUER_BASE}/${issuerName}/api/create-offer`, {
+    const response = await fetch(`/api/issuer/${issuerKey}/offer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${ISSUER_TOKEN}`,
       },
       body: request,
     })
@@ -172,11 +171,10 @@ function startSessionFor(issuerName: string) {
       walletLink: json.uri,
       txCode: json.txCode,
       poll: async () => {
-        const result = await fetch(`${ISSUER_BASE}/${issuerName}/api/check-offer`, {
+        const result = await fetch(`/api/issuer/${issuerKey}/offer/check`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${ISSUER_TOKEN}`,
           },
           body: JSON.stringify({ id: json.id }),
         })
@@ -193,14 +191,14 @@ const preAuthMode: IssuerModeConfig = {
   label: "Pre-authorized code",
   defaultRequest: preAuthPresets[0].request,
   presets: preAuthPresets,
-  startSession: startSessionFor(PRE_AUTH_ISSUER_NAME),
+  startSession: startSessionFor(PRE_AUTH_ISSUER_KEY),
 }
 
 const authCodeMode: IssuerModeConfig = {
   label: "Authorization code",
   defaultRequest: authCodePresets[0].request,
   presets: authCodePresets,
-  startSession: startSessionFor(AUTH_CODE_ISSUER_NAME),
+  startSession: startSessionFor(AUTH_CODE_ISSUER_KEY),
 }
 
 export const veramoIssuer: IssuerTabConfig = {
