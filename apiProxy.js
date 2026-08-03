@@ -53,14 +53,20 @@ async function forward(res, url, init) {
 
 // Mount the /api/* proxy routes onto an Express app or Router.
 export function mountApiProxy(app, config) {
-  app.use(express.json({ limit: "256kb" }))
+  // Forward the body byte-exact rather than parse+re-serialize: this tool exists
+  // to experiment with raw offer payloads, so key order / duplicate keys /
+  // formatting must survive, and JSON validation stays with Veramo (which
+  // returns a useful message) instead of body-parser. Scoped per-route so it
+  // never touches static-asset or dev-server requests. The cap still applies.
+  const rawJson = express.text({ type: "application/json", limit: "256kb" })
+  const jsonHeaders = { "Content-Type": "application/json" }
 
   // --- Verifier -------------------------------------------------------------
-  app.post("/api/verifier/offer", (req, res) =>
+  app.post("/api/verifier/offer", rawJson, (req, res) =>
     forward(res, `${config.verifierApiUrl}/${config.verifierName}/api/create-dcql-offer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.verifierToken}` },
-      body: JSON.stringify(req.body),
+      headers: { ...jsonHeaders, Authorization: `Bearer ${config.verifierToken}` },
+      body: req.body,
     })
   )
 
@@ -80,24 +86,35 @@ export function mountApiProxy(app, config) {
     return name
   }
 
-  app.post("/api/issuer/:issuerKey/offer", (req, res) => {
+  app.post("/api/issuer/:issuerKey/offer", rawJson, (req, res) => {
     const name = resolveIssuer(req, res)
     if (!name) return
     forward(res, `${config.issuerApiUrl}/${name}/api/create-offer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.issuerToken}` },
-      body: JSON.stringify(req.body),
+      headers: { ...jsonHeaders, Authorization: `Bearer ${config.issuerToken}` },
+      body: req.body,
     })
   })
 
-  app.post("/api/issuer/:issuerKey/offer/check", (req, res) => {
+  app.post("/api/issuer/:issuerKey/offer/check", rawJson, (req, res) => {
     const name = resolveIssuer(req, res)
     if (!name) return
     forward(res, `${config.issuerApiUrl}/${name}/api/check-offer`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.issuerToken}` },
-      body: JSON.stringify(req.body),
+      headers: { ...jsonHeaders, Authorization: `Bearer ${config.issuerToken}` },
+      body: req.body,
     })
+  })
+
+  // Unmatched /api request -> JSON 404, so it never falls through to the SPA
+  // shell (an HTML 200 would slip past the frontend's `status !== 200` guards).
+  app.use("/api", (_req, res) => res.status(404).json({ error: "not_found" }))
+
+  // Terminal error handler: body too large, etc. Never surface a stack trace /
+  // install path to the client (the whole point of this proxy is closing leaks).
+  app.use((err, _req, res, _next) => {
+    console.error("Request error:", err?.message ?? err)
+    res.status(err?.status ?? err?.statusCode ?? 500).json({ error: "bad_request" })
   })
 
   return app

@@ -350,7 +350,9 @@ export const eudiVerifier: VerifierTabConfig = {
 
 // The verifier admin token lives on the backend proxy (see server.js); the
 // browser talks to same-origin /api/verifier/* routes with no credentials.
-const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
+// `||` (not `??`) so an empty-string env var — e.g. `export FOO=$UNSET` in sh —
+// also falls back to the default rather than being baked in as "".
+const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL || "https://veramo-issuer.openid4vc.staging.yivi.app"
 
 // Shape of a single credential in a Veramo check-offer response.
 interface VeramoCredential {
@@ -639,7 +641,7 @@ export const veramoVerifier: VerifierTabConfig = {
 // IRMA verifier (uses yivi-frontend-packages popup)
 // ---------------------------------------------------------------------------
 
-const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL ?? "https://is.openid4vc.staging.yivi.app"
+const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL || "https://is.openid4vc.staging.yivi.app"
 
 // A disclosure request is a "condiscon": a list of "discons", each a list of
 // "cons", each a list of attribute identifiers (a plain id, or an id with a
