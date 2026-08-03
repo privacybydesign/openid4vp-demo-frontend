@@ -2,7 +2,6 @@ import { newPopup } from "@privacybydesign/yivi-frontend"
 import type { SessionPtr } from "@privacybydesign/yivi-frontend"
 import type { DisclosureContent, Preset, VerifierSessionResult, VerifierTabConfig } from "./tabs"
 import type { LinkForm } from "./walletLink"
-import { requireEnv } from "./env"
 
 function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   const components = sdjwt.split("~")
@@ -349,11 +348,11 @@ export const eudiVerifier: VerifierTabConfig = {
 // Veramo verifier
 // ---------------------------------------------------------------------------
 
-const VERAMO_API_URL = import.meta.env.VITE_VERAMO_API_URL ?? "https://veramo-verifier.openid4vc.staging.yivi.app"
-const VERAMO_VERIFIER_NAME = import.meta.env.VITE_VERAMO_VERIFIER_NAME ?? "test-verifier"
-const VERAMO_ADMIN_TOKEN = requireEnv(import.meta.env.VITE_VERAMO_ADMIN_TOKEN, "VITE_VERAMO_ADMIN_TOKEN")
-
-const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL ?? "https://veramo-issuer.openid4vc.staging.yivi.app"
+// The verifier admin token lives on the backend proxy (see server.js); the
+// browser talks to same-origin /api/verifier/* routes with no credentials.
+// `||` (not `??`) so an empty-string env var — e.g. `export FOO=$UNSET` in sh —
+// also falls back to the default rather than being baked in as "".
+const VERAMO_ISSUER_BASE = import.meta.env.VITE_VERAMO_ISSUER_API_URL || "https://veramo-issuer.openid4vc.staging.yivi.app"
 
 // Shape of a single credential in a Veramo check-offer response.
 interface VeramoCredential {
@@ -594,11 +593,10 @@ export const veramoVerifier: VerifierTabConfig = {
   defaultRequest: veramoPresets[0].request,
   presets: veramoPresets,
   startSession: async (request: string) => {
-    const response = await fetch(`${VERAMO_API_URL}/${VERAMO_VERIFIER_NAME}/api/create-dcql-offer`, {
+    const response = await fetch(`/api/verifier/offer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${VERAMO_ADMIN_TOKEN}`,
       },
       body: request,
     })
@@ -617,9 +615,7 @@ export const veramoVerifier: VerifierTabConfig = {
     return {
       walletLink: json.requestUri,
       poll: async () => {
-        const result = await fetch(`${VERAMO_API_URL}/${VERAMO_VERIFIER_NAME}/api/check-offer/${state}`, {
-          headers: { Authorization: `Bearer ${VERAMO_ADMIN_TOKEN}` },
-        })
+        const result = await fetch(`/api/verifier/offer/${encodeURIComponent(state)}`)
         if (result.status !== 200) return null
 
         const response = await result.json()
@@ -645,7 +641,7 @@ export const veramoVerifier: VerifierTabConfig = {
 // IRMA verifier (uses yivi-frontend-packages popup)
 // ---------------------------------------------------------------------------
 
-const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL ?? "https://is.openid4vc.staging.yivi.app"
+const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL || "https://is.openid4vc.staging.yivi.app"
 
 // A disclosure request is a "condiscon": a list of "discons", each a list of
 // "cons", each a list of attribute identifiers (a plain id, or an id with a
