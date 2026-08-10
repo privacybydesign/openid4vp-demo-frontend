@@ -20,13 +20,26 @@ function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
 const ISSUER_CHAIN =
   "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----"
 
+// The intended use the verifier image configures out of the box. From v0.11.0 it
+// refuses a transaction that names neither an intended use nor a registration
+// certificate, and it does not check the query against the one it resolves — it only
+// forwards it to the wallet as verifier_info. So this works for any credential type.
+const EUDI_INTENDED_USE_ID = "1"
+
+// No request_uri_method: v0.11.0 enforces the method the transaction was started
+// with, and wallets fetch the request object with a GET. Omitting it falls back to
+// the server's verifier.requestJwt.requestUriMethod, which the deployment sets to
+// PostOrGet (see verifier-eudi.tf in openid4vc-poc-ops).
+//
+// A pasted query in the request editor for a vct outside the verifier's
+// VERIFIER_ATTESTATIONCLASSIFICATIONS fails at presentation validation, after the
+// user has already consented in the wallet — not at session start.
 function eudiRequest(dcql_query: object): object {
   return {
-    type: "vp_token",
     dcql_query,
     nonce: "nonce",
     jar_mode: "by_reference",
-    request_uri_method: "post",
+    intended_use_id: EUDI_INTENDED_USE_ID,
     issuer_chain: ISSUER_CHAIN,
   }
 }
