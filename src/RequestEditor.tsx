@@ -25,11 +25,12 @@ interface RequestEditorProps {
   onStart: () => void
 }
 
-// On the IRMA tab the default form runs the session through the yivi popup
-// instead of showing a scheme link.
+// On the IRMA verifier tab the default form runs the session through the yivi
+// popup instead of showing a scheme link. The IRMA issuer tab does not: it always
+// shows the link, so its scheme option is named like everyone else's.
 function linkFormOptions(activeTab: TabId): { id: LinkForm; label: string }[] {
   return [
-    { id: "scheme", label: activeTab === "irma" ? "Yivi popup" : "Custom scheme" },
+    { id: "scheme", label: activeTab === "irma-verifier" ? "Yivi popup" : "Custom scheme" },
     { id: "universal", label: "Universal link" },
     { id: "universal-staging", label: "Universal link (staging)" },
   ]

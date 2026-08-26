@@ -13,12 +13,14 @@ services:
       - API_URL=https://verifierapi.openid4vc.staging.yivi.app
       - IRMA_SERVER_URL=https://is.demo.staging.yivi.app
       - UNIVERSAL_LINK_HOST=open.yivi.app
+      - UNIVERSAL_LINK_HOST_STAGING=open.staging.yivi.app
       # --- Server-only config (used by the BFF proxy, never sent to browser) --
       - VERAMO_API_URL=https://veramo-verifier.openid4vc.staging.yivi.app
       - VERAMO_VERIFIER_NAME=test-verifier
       - VERAMO_ISSUER_API_URL=https://veramo-issuer.openid4vc.staging.yivi.app
       - VERAMO_ISSUER_NAME=test-issuer
       - VERAMO_AUTHCODE_ISSUER_NAME=authcode-issuer
+      - EUDI_ISSUER_API_URL=https://eudi-issuer.openid4vc.staging.yivi.app
       # --- Admin tokens (server-only; REQUIRED) -------------------------------
       - VERAMO_ADMIN_TOKEN=${VERAMO_ADMIN_TOKEN:?VERAMO_ADMIN_TOKEN must be set (see .env.example)}
       - VERAMO_ISSUER_ADMIN_TOKEN=${VERAMO_ISSUER_ADMIN_TOKEN:?VERAMO_ISSUER_ADMIN_TOKEN must be set (see .env.example)}

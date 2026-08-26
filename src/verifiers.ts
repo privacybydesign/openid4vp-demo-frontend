@@ -1,7 +1,8 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
-import type { SessionPtr } from "@privacybydesign/yivi-frontend"
 import type { DisclosureContent, Preset, VerifierSessionResult, VerifierTabConfig } from "./tabs"
 import type { LinkForm } from "./walletLink"
+import { IRMA_SERVER_URL, startIrmaSession, irmaWalletLink, pollIrmaSession } from "./irma"
+import type { IrmaSessionResponse } from "./irma"
 
 function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   const components = sdjwt.split("~")
@@ -321,7 +322,7 @@ const eudiPresets: Preset[] = [
 
 export const eudiVerifier: VerifierTabConfig = {
   kind: "verifier",
-  tab: "eudi",
+  tab: "eudi-verifier",
   label: "EUDI",
   defaultRequest: eudiPresets[0].request,
   presets: eudiPresets,
@@ -602,7 +603,7 @@ const veramoPresets: Preset[] = [
 export const veramoVerifier: VerifierTabConfig = {
   kind: "verifier",
   tab: "veramo-verifier",
-  label: "Veramo Verifier",
+  label: "Veramo",
   defaultRequest: veramoPresets[0].request,
   presets: veramoPresets,
   startSession: async (request: string) => {
@@ -654,19 +655,11 @@ export const veramoVerifier: VerifierTabConfig = {
 // IRMA verifier (uses yivi-frontend-packages popup)
 // ---------------------------------------------------------------------------
 
-const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL || "https://is.openid4vc.staging.yivi.app"
-
 // A disclosure request is a "condiscon": a list of "discons", each a list of
 // "cons", each a list of attribute identifiers (a plain id, or an id with a
 // required value).
 type IrmaAttribute = string | { type: string; value: string }
 type IrmaCondiscon = IrmaAttribute[][][]
-
-// Response shape of the IRMA server's POST /session endpoint.
-interface IrmaSessionResponse {
-  sessionPtr: SessionPtr
-  token: string
-}
 
 function irmaRequest(disclose: IrmaCondiscon): object {
   return {
@@ -788,38 +781,23 @@ function parseIrmaResult(result: unknown): DisclosureContent[][] {
   )
 }
 
-// Starts the session directly against the IRMA server (the same endpoints the
-// popup uses) so the session link and its host are under our control.
+// Drives the session ourselves rather than through the popup, so the session link
+// and its host are under our control and can be shown in any link form.
 async function startIrmaSessionWithLink(request: string): Promise<VerifierSessionResult> {
-  const response = await fetch(`${IRMA_SERVER_URL}/session`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: request,
-  })
-  if (!response.ok) {
-    throw new Error(`Failed to create IRMA session (HTTP ${response.status})`)
-  }
-  const session = (await response.json()) as IrmaSessionResponse
+  const session = await startIrmaSession(request)
 
   return {
-    walletLink: `irma://qr/json/${encodeURIComponent(JSON.stringify(session.sessionPtr))}`,
+    walletLink: irmaWalletLink(session.sessionPtr),
     poll: async () => {
-      const response = await fetch(`${IRMA_SERVER_URL}/session/${session.token}/result`)
-      if (response.status !== 200) return null
-
-      const result = (await response.json()) as { status?: string }
-      if (result.status === "CANCELLED" || result.status === "TIMEOUT") {
-        throw new Error(`IRMA session ${result.status.toLowerCase()}`)
-      }
-      if (result.status !== "DONE") return null
-      return parseIrmaResult(result)
+      const result = await pollIrmaSession(session.token)
+      return result ? parseIrmaResult(result) : null
     },
   }
 }
 
 export const irmaVerifier: VerifierTabConfig = {
   kind: "verifier",
-  tab: "irma",
+  tab: "irma-verifier",
   label: "IRMA",
   defaultRequest: irmaPresets[0].request,
   presets: irmaPresets,
