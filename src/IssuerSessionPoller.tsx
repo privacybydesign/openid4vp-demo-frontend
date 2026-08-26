@@ -6,6 +6,9 @@ interface IssuerSessionPollerProps {
   linkForm: LinkForm
   txCode?: string
   onCancel: () => void
+  // Present only when the issuer exposes no offer state, so nothing is being
+  // watched and the operator has to say when the wallet has the credential.
+  onConfirm?: () => void
 }
 
 const linkFormLabel: Record<LinkForm, string> = {
@@ -14,7 +17,7 @@ const linkFormLabel: Record<LinkForm, string> = {
   "universal-staging": "Using universal link (staging)",
 }
 
-export default function IssuerSessionPoller({ walletLink, linkForm, txCode, onCancel }: IssuerSessionPollerProps) {
+export default function IssuerSessionPoller({ walletLink, linkForm, txCode, onCancel, onConfirm }: IssuerSessionPollerProps) {
   const copyTxCode = async () => {
     if (!txCode) return
     try {
@@ -27,6 +30,12 @@ export default function IssuerSessionPoller({ walletLink, linkForm, txCode, onCa
   return (
     <div className="flex flex-col items-center gap-6 mt-4">
       <p className="text-sm text-[#484747]">Scan the QR code with the Yivi app or tap the button below.</p>
+      {onConfirm && (
+        <p className="text-xs text-[#484747] max-w-sm text-center">
+          This issuer keeps no record of the offer, so the tool cannot tell when the wallet has
+          collected it. Check the wallet, then confirm below.
+        </p>
+      )}
       <div className="flex flex-col gap-3 bg-white p-4 rounded-lg shadow-sm border border-[#CFE4EF]">
         <p className="text-xs text-[#484747] text-center">{linkFormLabel[linkForm]}</p>
         <QRCodeComponent text={walletLink} />
@@ -52,6 +61,11 @@ export default function IssuerSessionPoller({ walletLink, linkForm, txCode, onCa
         <button className="btn-primary w-full" onClick={() => (window.location.href = walletLink)}>
           Open Yivi
         </button>
+        {onConfirm && (
+          <button className="btn-primary w-full" onClick={onConfirm}>
+            The wallet has it
+          </button>
+        )}
         <button className="btn-secondary w-full" onClick={onCancel}>
           Cancel
         </button>

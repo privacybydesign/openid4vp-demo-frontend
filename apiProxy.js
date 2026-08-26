@@ -25,6 +25,11 @@ export function proxyConfigFromEnv(env) {
       authcode: env.VERAMO_AUTHCODE_ISSUER_NAME ?? "authcode-issuer",
     },
     issuerToken: env.VERAMO_ISSUER_ADMIN_TOKEN,
+
+    // EUDI reference Python issuer. No token: its offer endpoint is
+    // unauthenticated, so this proxy exists for CORS and to keep the issuer's
+    // odd wire format (see below) in one place rather than in the browser.
+    eudiIssuerApiUrl: env.EUDI_ISSUER_API_URL ?? "https://eudi-issuer.openid4vc.staging.yivi.app",
   }
 }
 
@@ -103,6 +108,28 @@ export function mountApiProxy(app, config) {
       method: "POST",
       headers: { ...jsonHeaders, Authorization: `Bearer ${config.issuerToken}` },
       body: req.body,
+    })
+  })
+
+  // --- EUDI issuer ----------------------------------------------------------
+  // The only route that does not forward the editor's bytes as-is, because
+  // /credentialOfferReq2 does not take JSON: it takes a form field holding a
+  // JWT-shaped `header.payload.signature` string, and decodes only the payload
+  // segment (the signature is never verified — see app/preauthorization.py
+  // upstream). So the bytes are re-enveloped, not rewritten: base64url is
+  // byte-exact, so key order, duplicate keys and whitespace all survive, and the
+  // JSON the issuer parses is character-for-character what the operator typed.
+  //
+  // The response is forwarded untouched: it is the credential offer JSON, not a
+  // wallet link, and turning it into one belongs with the rest of the wallet-link
+  // construction in the browser (src/walletLink.ts).
+  app.post("/api/eudi-issuer/offer", rawJson, (req, res) => {
+    const payload = Buffer.from(req.body ?? "", "utf8").toString("base64url")
+    const header = Buffer.from("{}", "utf8").toString("base64url")
+    forward(res, `${config.eudiIssuerApiUrl}/credentialOfferReq2`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ request: `${header}.${payload}.` }).toString(),
     })
   })
 
