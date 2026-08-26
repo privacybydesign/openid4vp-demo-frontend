@@ -4,6 +4,7 @@ import { tabs } from "./tabs"
 import type {
   TabId,
   IssuerMode,
+  DcApiTransaction,
   DisclosureContent,
   IssuanceComplete,
   VerifierSessionResult,
@@ -16,6 +17,7 @@ import SessionPoller from "./SessionPoller"
 import WalletResponseView from "./WalletResponseView"
 import IssuerSessionPoller from "./IssuerSessionPoller"
 import IssuanceCompleteView from "./IssuanceCompleteView"
+import DcApiRequestView from "./DcApiRequestView"
 import ErrorView from "./ErrorView"
 import { applyLinkForm } from "./walletLink"
 import type { LinkForm } from "./walletLink"
@@ -32,12 +34,17 @@ function hostForLinkForm(form: LinkForm): string {
 const FrontendState = {
   Pending: "Pending",
   Polling: "Polling",
+  // DC API only: the transaction exists and the signed request is on screen, waiting for
+  // the operator to make the browser call. Its own state because that call must start
+  // from a fresh click — see docs/adr/0002.
+  RequestReady: "RequestReady",
   Done: "Done",
   Error: "Error",
 } as const
 type FrontendState = typeof FrontendState[keyof typeof FrontendState]
 
 const ISSUER_TAB: TabId = "veramo-issuer"
+const DCAPI_TAB: TabId = "dc-api"
 const ALL_ISSUER_MODES: IssuerMode[] = ["pre-authorized-code", "authorization-code"]
 
 function defaultRequestFor(tabId: TabId, mode: IssuerMode | null): string {
@@ -107,7 +114,8 @@ function writeStateToUrl(tab: TabId, mode: IssuerMode, linkForm: LinkForm, reque
   if (tab === ISSUER_TAB) {
     params.set("mode", mode)
   }
-  if (linkForm !== DEFAULT_LINK_FORM) {
+  // The DC API tab has no wallet link, so a link form would be noise in a shared URL.
+  if (linkForm !== DEFAULT_LINK_FORM && tab !== DCAPI_TAB) {
     params.set("link", linkForm)
   }
   if (!isDefault) {
@@ -128,6 +136,8 @@ function App() {
   const [issuanceResult, setIssuanceResult] = useState<IssuanceComplete | null>(null)
   const [walletLink, setWalletLink] = useState("")
   const [txCode, setTxCode] = useState<string | undefined>(undefined)
+  const [dcApiTx, setDcApiTx] = useState<DcApiTransaction | null>(null)
+  const [dcApiInlineError, setDcApiInlineError] = useState("")
   const [errorMessage, setErrorMessage] = useState<string>("")
   const [requestPerTab, setRequestPerTab] = useState(initial.requestPerTab)
   const [issuerRequest, setIssuerRequest] = useState(initial.issuerRequest)
@@ -232,6 +242,11 @@ function App() {
       if (tab.kind === "verifier") {
         const session = await tab.startSession(requestPerTab[activeTab], linkForm)
         await startVerifierSession(session)
+      } else if (tab.kind === "dcapi") {
+        const transaction = await tab.createRequest(requestPerTab[activeTab])
+        setDcApiTx(transaction)
+        setDcApiInlineError("")
+        setFrontendState(FrontendState.RequestReady)
       } else {
         const session = await tab.modes[activeMode].startSession(issuerRequest)
         await startIssuerSession(session)
@@ -241,16 +256,43 @@ function App() {
     }
   }
 
+  // Not async, and nothing is awaited before tab.present(): navigator.credentials.get()
+  // needs the transient user activation from the click that got us here, and present()
+  // calls it as its first statement. An await in between can consume the activation
+  // window and raise a NotAllowedError indistinguishable from "no provider registered",
+  // which is the one thing this tab exists to tell apart. See docs/adr/0002.
+  const presentDcApi = () => {
+    if (tab.kind !== "dcapi" || !dcApiTx) return
+    setDcApiInlineError("")
+
+    tab.present(dcApiTx).then(
+      (disclosures) => {
+        setWalletResponse(disclosures)
+        setFrontendState(FrontendState.Done)
+      },
+      (error: unknown) => {
+        // Deliberately stays on RequestReady rather than falling through to ErrorView:
+        // the transaction is still alive server-side, so the decoded request and its
+        // checks stay on screen and the button stays armed for a retry.
+        setDcApiInlineError(error instanceof Error ? error.message : String(error))
+      }
+    )
+  }
+
   const cancel = () => {
     clearInterval(pollingCallbackId)
     setFrontendState(FrontendState.Pending)
     setTxCode(undefined)
+    setDcApiTx(null)
+    setDcApiInlineError("")
   }
 
   const reset = () => {
     clearInterval(pollingCallbackId)
     setFrontendState(FrontendState.Pending)
     setTxCode(undefined)
+    setDcApiTx(null)
+    setDcApiInlineError("")
     setIssuanceResult(null)
     setErrorMessage("")
   }
@@ -280,6 +322,8 @@ function App() {
             onSubModeChange={(id) => switchMode(id as IssuerMode)}
             linkForm={linkForm}
             onLinkFormChange={switchLinkForm}
+            showLinkForm={tab.kind !== "dcapi"}
+            startLabel={tab.kind === "dcapi" ? "Create request" : undefined}
             onChange={changeRequest}
             onStart={startSession}
           />
@@ -293,7 +337,16 @@ function App() {
           <IssuerSessionPoller walletLink={displayedLink} linkForm={linkForm} txCode={txCode} onCancel={cancel} />
         )}
 
-        {frontendState === FrontendState.Done && tab.kind === "verifier" && (
+        {frontendState === FrontendState.RequestReady && tab.kind === "dcapi" && dcApiTx && (
+          <DcApiRequestView
+            transaction={dcApiTx}
+            inlineError={dcApiInlineError}
+            onPresent={presentDcApi}
+            onCancel={cancel}
+          />
+        )}
+
+        {frontendState === FrontendState.Done && (tab.kind === "verifier" || tab.kind === "dcapi") && (
           <WalletResponseView disclosures={walletResponse} onReset={reset} />
         )}
 

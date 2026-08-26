@@ -11,6 +11,7 @@ services:
       - PORT=8080
       # --- Public config (inlined into the client bundle at build time) -------
       - API_URL=https://verifierapi.openid4vc.staging.yivi.app
+      - DCAPI_API_URL=https://verifierapi-dcapi.openid4vc.staging.yivi.app
       - IRMA_SERVER_URL=https://is.demo.staging.yivi.app
       - UNIVERSAL_LINK_HOST=open.yivi.app
       # --- Server-only config (used by the BFF proxy, never sent to browser) --

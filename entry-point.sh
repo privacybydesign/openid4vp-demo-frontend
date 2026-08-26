@@ -6,6 +6,7 @@ set -e
 # export when the source var is set: `export VITE_X=$UNSET` in sh puts an empty
 # string into the environment, which Vite would bake in over the code default.
 [ -n "$API_URL" ] && export VITE_API_URL=$API_URL
+[ -n "$DCAPI_API_URL" ] && export VITE_DCAPI_API_URL=$DCAPI_API_URL
 [ -n "$VERAMO_ISSUER_API_URL" ] && export VITE_VERAMO_ISSUER_API_URL=$VERAMO_ISSUER_API_URL
 [ -n "$IRMA_SERVER_URL" ] && export VITE_IRMA_SERVER_URL=$IRMA_SERVER_URL
 [ -n "$UNIVERSAL_LINK_HOST" ] && export VITE_UNIVERSAL_LINK_HOST=$UNIVERSAL_LINK_HOST

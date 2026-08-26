@@ -21,6 +21,12 @@ interface RequestEditorProps {
   onSubModeChange?: (id: string) => void
   linkForm: LinkForm
   onLinkFormChange: (form: LinkForm) => void
+  // False on the DC API tab: that flow has no wallet link, so the radio group would be
+  // offering a choice that changes nothing.
+  showLinkForm?: boolean
+  // The DC API tab's first button only creates the request; the browser call is a
+  // separate step, and the two-step flow is only legible if the label says so.
+  startLabel?: string
   onChange: (value: string) => void
   onStart: () => void
 }
@@ -44,6 +50,8 @@ export default function RequestEditor({
   onSubModeChange,
   linkForm,
   onLinkFormChange,
+  showLinkForm = true,
+  startLabel = "Start Session",
   onChange,
   onStart,
 }: RequestEditorProps) {
@@ -110,7 +118,7 @@ export default function RequestEditor({
           </select>
         )}
         <button className="btn-primary" onClick={onStart}>
-          Start Session
+          {startLabel}
         </button>
         {subModes && (
           <div className="flex flex-col gap-2" role="radiogroup" aria-label="Mode">
@@ -130,22 +138,24 @@ export default function RequestEditor({
             ))}
           </div>
         )}
-        <div className="flex flex-col gap-2" role="radiogroup" aria-label="Link form">
-          <span className="text-[15px] font-semibold text-[#484747] select-none">Link form</span>
-          {linkFormOptions(activeTab).map((o) => (
-            <label key={o.id} className="flex items-center gap-1.5 text-[15px] text-[#484747] cursor-pointer select-none">
-              <input
-                type="radio"
-                name="link-form"
-                value={o.id}
-                checked={o.id === linkForm}
-                onChange={() => onLinkFormChange(o.id)}
-                className="accent-[#00508a]"
-              />
-              <span>{o.label}</span>
-            </label>
-          ))}
-        </div>
+        {showLinkForm && (
+          <div className="flex flex-col gap-2" role="radiogroup" aria-label="Link form">
+            <span className="text-[15px] font-semibold text-[#484747] select-none">Link form</span>
+            {linkFormOptions(activeTab).map((o) => (
+              <label key={o.id} className="flex items-center gap-1.5 text-[15px] text-[#484747] cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="link-form"
+                  value={o.id}
+                  checked={o.id === linkForm}
+                  onChange={() => onLinkFormChange(o.id)}
+                  className="accent-[#00508a]"
+                />
+                <span>{o.label}</span>
+              </label>
+            ))}
+          </div>
+        )}
       </div>
       <div
         ref={editorRef}

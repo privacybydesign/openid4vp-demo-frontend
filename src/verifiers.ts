@@ -3,7 +3,9 @@ import type { SessionPtr } from "@privacybydesign/yivi-frontend"
 import type { DisclosureContent, Preset, VerifierSessionResult, VerifierTabConfig } from "./tabs"
 import type { LinkForm } from "./walletLink"
 
-function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
+// Also used by the Digital Credentials API tab (src/dcApi.ts), which reads its claims
+// from the same EUDI verifier endpoint and so gets the same vp_token shape back.
+export function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
   const components = sdjwt.split("~")
   const disclosures = components.slice(1, components.length - 1).map((value) => atob(value))
 
@@ -17,7 +19,9 @@ function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
 // EUDI verifier
 // ---------------------------------------------------------------------------
 
-const ISSUER_CHAIN =
+// Shared with the Digital Credentials API tab: both verifier deployments trust the same
+// Yivi staging attestation providers CA, because both run off the same keystore.
+export const ISSUER_CHAIN =
   "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----"
 
 // The intended use the verifier image configures out of the box. From v0.11.0 it
