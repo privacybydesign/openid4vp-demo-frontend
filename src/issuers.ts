@@ -237,35 +237,135 @@ const PRE_AUTHORIZED_CODE_GRANT = "urn:ietf:params:oauth:grant-type:pre-authoriz
 interface EudiCredentialSpec {
   configurationId: string
   label: string
+  group: string
   displayName: string
   data: object
 }
 
-// Only the two configurations whose id and `data` shape are established against
-// the running 0.9.4 image (both are driven by irmago's integration tests). The
-// image advertises many more in its metadata, but metadata is not the list of
-// what it can issue — the issuer's own countries.<CC>.supported_credential_ids is,
-// and a configuration missing from there produces an offer that fails at the
-// credential endpoint. Add entries here in step with that config, not from the
-// metadata document.
+// One identity across every preset here, matching irmago's fixtures so a
+// credential minted from this tab and one minted by the integration tests
+// describe the same person. Thirty-five in 2026, which is what the age thresholds
+// below assert.
+const JANE_FAMILY_NAME = "Doe"
+const JANE_GIVEN_NAME = "Jane"
+const JANE_BIRTH_DATE = "1990-05-19"
+
+// A one-pixel PNG in url-safe base64. The issuer runs `urlsafe_b64decode` over
+// portrait, picture and the signature elements before signing (formatter_func.py),
+// so the element lands as a CBOR byte string — and a payload containing + or /
+// would not survive that decode. The metadata calls this element a jpeg;
+// `value_type` is advisory and nothing coerces it, so a PNG is what gets signed,
+// which is why the response view sniffs the magic bytes rather than trusting the
+// element name.
+const ONE_PIXEL_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+
+// Upstream's thirteen thresholds — what the reference issuer's own metadata
+// declares, and what an age-verification rulebook would carry. The deployed
+// metadata is widened to age_over_1 … age_over_99, so any subset of those mints;
+// this is the conventional set rather than the maximal one.
+//
+// True through 28 and false from 40, so the credential describes a thirty-five
+// year old rather than asserting every threshold at once. ISO 18013-5 7.2.5
+// requires each value to be calculated by the issuing authority to be valid at
+// the MSO's validFrom: this issuer calculates nothing and takes these verbatim,
+// which is right for a demo where the caller decides what to assert and wrong for
+// anything that has to be believed.
+const AGE_THRESHOLDS = {
+  age_over_13: true,
+  age_over_15: true,
+  age_over_16: true,
+  age_over_18: true,
+  age_over_21: true,
+  age_over_23: true,
+  age_over_25: true,
+  age_over_27: true,
+  age_over_28: true,
+  age_over_40: false,
+  age_over_60: false,
+  age_over_65: false,
+  age_over_67: false,
+}
+
+const SD_JWT_GROUP = "SD-JWT"
+
+// Everything mdoc needs a wallet build that bypasses checkDocumentSignerEKU: the
+// staging issuer certificate carries `extendedKeyUsage = clientAuth` only, and
+// ISO 18013-5 Table B.3 makes the document-signer EKU mandatory and critical, so
+// irmago refuses the document signer. Said once here rather than in six labels.
+// See environments/dev/eudi-issuer/certs/README.md in openid4vc-poc-ops.
+const MDOC_GROUP = "mdoc — needs mdoc wallet build"
+
+// What each configuration expects in `data`, established against the running
+// 0.9.4 image rather than read off its metadata.
+//
+// Three things decide whether an entry here works, and none of them is the
+// metadata document:
+//
+//   * A country bucket with signing keys for whichever country the offer lands
+//     in. preauthorization.py's request_preauth_token hardcodes "AV" for the two
+//     age-verification configurations and "FC" for everything else, so both
+//     buckets have to exist in config_issuer_backend.yaml — they do.
+//     `countries.<CC>.supported_credential_ids` is *not* consulted on this path;
+//     it drives the browser form flow alone, which is why PID, mDL, Photo ID and
+//     AAMVA mDL issue without being listed there.
+//   * Every element the configuration marks `mandatory` and does not fill itself.
+//     irmago's requireMandatoryMdocElements refuses an mdoc missing one, after
+//     the wallet has already completed the token exchange.
+//   * The claims array of the configuration, which is an allowlist: populate_pdata
+//     copies `data[attr]` only for attributes the configuration declares, and
+//     drops anything else silently.
+//
+// What the issuer fills on its own: the issuance/issue and expiry dates (ninety
+// days apart, per the pinned `validity`), `issuing_authority` and
+// `issuing_authority_unicode` from the configuration's `issuer_config`,
+// `un_distinguishing_sign` from the country bucket, `issuing_country` from the
+// country bucket's *name* — so "FC" or "AV" rather than an ISO 3166-1 code, and
+// unoverridable from here because credentialCreation applies it after the posted
+// data — and Photo ID's `age_over_18`, computed from `birth_date`.
 const eudiCredentials: EudiCredentialSpec[] = [
   {
     configurationId: "eu.europa.ec.eudi.pid_vc_sd_jwt",
-    label: "PID (SD-JWT VC)",
+    label: "PID",
+    group: SD_JWT_GROUP,
     displayName: "PID (SD-JWT VC)",
+    // `place_of_birth` and `nationalities` are mandatory for this vct and were
+    // missing until now, so the PID this minted was incomplete and a verifier
+    // preset asking for either found nothing to match. Their shapes come from
+    // upstream's own dynamic_R2_data_collect — a list of objects and a list of
+    // country codes — which disagrees with what the metadata's `value_type`
+    // implies; the collector is what actually posts, so it wins.
+    //
+    // The rest is optional, requested by the "PID — full identity" verifier
+    // preset. If this offer ever starts failing at the credential endpoint,
+    // `address` is the first thing to drop: it is the one claim whose posted shape
+    // is inferred rather than observed (misc.py folds its sub-claims under the
+    // `address` key and then calls the type a list).
     data: {
-      family_name: "Doe",
-      given_name: "Jane",
-      birthdate: "1990-05-19",
+      family_name: JANE_FAMILY_NAME,
+      given_name: JANE_GIVEN_NAME,
+      birthdate: JANE_BIRTH_DATE,
+      place_of_birth: [{ locality: "Amsterdam", country: "NL" }],
+      nationalities: ["NL"],
+      address: {
+        street_address: "Damrak 1",
+        locality: "Amsterdam",
+        region: "Noord-Holland",
+        postal_code: "1012 LG",
+        country: "NL",
+      },
+      sex: 2,
+      email_address: "jane.doe@example.com",
+      mobile_phone_number: "+31612345678",
+      birth_family_name: "de Vries",
+      document_number: "SPEC12345",
     },
   },
   {
-    // docType eu.europa.ec.av.1. Needs an mdoc-capable wallet build: irmago only
-    // accepts mso_mdoc at the OpenID4VCI format gate on its mdoc branches, and
-    // rejects the credential configuration outright before that lands. The offer
-    // itself works either way, which is what makes the failure confusing.
+    // docType eu.europa.ec.av.1, issued under the pseudo-country "AV".
     configurationId: "eu.europa.ec.eudi.age_verification_mdoc",
-    label: "Age verification (mdoc) — needs mdoc wallet build",
+    label: "Age verification — over 18 only",
+    group: MDOC_GROUP,
     displayName: "Age verification (mdoc)",
     data: {
       // The one element the AV profile makes mandatory; every other age_over_NN
@@ -273,8 +373,103 @@ const eudiCredentials: EudiCredentialSpec[] = [
       age_over_18: true,
     },
   },
+  {
+    configurationId: "eu.europa.ec.eudi.age_verification_mdoc",
+    label: "Age verification — thirteen thresholds",
+    group: MDOC_GROUP,
+    displayName: "Age verification (mdoc)",
+    data: AGE_THRESHOLDS,
+  },
+  {
+    // docType eu.europa.ec.eudi.pid.1, namespace the same string.
+    configurationId: "eu.europa.ec.eudi.pid_mdoc",
+    label: "PID",
+    group: MDOC_GROUP,
+    displayName: "PID (mdoc)",
+    // Mandatory and user-sourced: family_name, given_name, birth_date,
+    // place_of_birth, nationality. Note the shapes are not the SD-JWT ones —
+    // `birth_date` not `birthdate`, a map not a list for place_of_birth, and
+    // `nationality` singular.
+    data: {
+      family_name: JANE_FAMILY_NAME,
+      given_name: JANE_GIVEN_NAME,
+      birth_date: JANE_BIRTH_DATE,
+      place_of_birth: { country: "NL", locality: "Amsterdam" },
+      nationality: ["NL"],
+      sex: 2,
+      resident_city: "Amsterdam",
+      document_number: "SPEC12345",
+    },
+  },
+  {
+    // docType org.iso.18013.5.1.mDL, namespace org.iso.18013.5.1.
+    configurationId: "eu.europa.ec.eudi.mdl_mdoc",
+    label: "mDL",
+    group: MDOC_GROUP,
+    displayName: "mDL (mdoc)",
+    // portrait and driving_privileges are both mandatory and user-sourced, which
+    // is what makes this the one credential here that cannot be minted from names
+    // alone.
+    data: {
+      family_name: JANE_FAMILY_NAME,
+      given_name: JANE_GIVEN_NAME,
+      birth_date: JANE_BIRTH_DATE,
+      document_number: "X1234",
+      portrait: ONE_PIXEL_PNG,
+      driving_privileges: [{ vehicle_category_code: "B" }],
+      sex: 2,
+      nationality: "NL",
+      resident_city: "Amsterdam",
+      age_over_18: true,
+    },
+  },
+  {
+    // The same docType as mdl_mdoc — org.iso.18013.5.1.mDL — with a second
+    // namespace, org.iso.18013.5.1.aamva, alongside the ISO one. Hold both and a
+    // single doctype_value query has two candidates, which is what the "mDL — two
+    // candidates" verifier preset is for.
+    configurationId: "eu.europa.ec.eudi.aamva_mdl_mdoc",
+    label: "mDL (AAMVA)",
+    group: MDOC_GROUP,
+    displayName: "mDL, AAMVA (mdoc)",
+    // The AAMVA namespace adds three mandatory user-sourced elements of its own:
+    // family_name_truncation, given_name_truncation and sex. `sex` is declared in
+    // both namespaces, so the one posted value lands in both — which is why the
+    // response view qualifies keys with the namespace once a document discloses
+    // from more than one.
+    data: {
+      family_name: JANE_FAMILY_NAME,
+      given_name: JANE_GIVEN_NAME,
+      birth_date: JANE_BIRTH_DATE,
+      document_number: "X1234",
+      portrait: ONE_PIXEL_PNG,
+      driving_privileges: [{ vehicle_category_code: "B" }],
+      family_name_truncation: "N",
+      given_name_truncation: "N",
+      sex: 2,
+    },
+  },
+  {
+    // docType org.iso.23220.2.photoid.1 with namespace org.iso.23220.photoid.1 —
+    // the two differ by more than a suffix, and that is upstream's, not a typo.
+    // Deliberately not an 18013-5 docType: irmago's profileFor falls back to
+    // plain 18013-5 for a docType it does not know, and this is what exercises
+    // that branch against a real credential.
+    configurationId: "eu.europa.ec.eudi.photoid",
+    label: "Photo ID",
+    group: MDOC_GROUP,
+    displayName: "Photo ID (mdoc)",
+    // age_over_18 is mandatory here but issuer-sourced, and
+    // update_dates_and_special_claims computes it from birth_date — so posting
+    // birth_date is what satisfies it, and posting age_over_18 would be ignored.
+    data: {
+      portrait: ONE_PIXEL_PNG,
+      family_name_unicode: JANE_FAMILY_NAME,
+      given_name_unicode: JANE_GIVEN_NAME,
+      birth_date: JANE_BIRTH_DATE,
+    },
+  },
 ]
-
 const eudiDisplayNames: Record<string, string> = Object.fromEntries(
   eudiCredentials.map((c) => [c.configurationId, c.displayName])
 )
@@ -292,6 +487,7 @@ function eudiOfferRequest(spec: EudiCredentialSpec): object {
 
 const eudiPresets: Preset[] = eudiCredentials.map((spec) => ({
   label: spec.label,
+  group: spec.group,
   request: eudiOfferRequest(spec),
 }))
 
