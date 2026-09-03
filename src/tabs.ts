@@ -21,8 +21,27 @@ export interface DisclosureContent {
   value: string
 }
 
+// One credential's worth of disclosures, and what to call it.
+//
+// The outer dimension was always per-credential — an IRMA discon, a DCQL query id
+// — but nothing carried the credential's name and WalletResponseView flattened it
+// away. Survivable for a single SD-JWT; not for a request that answers with a PID
+// and an mDL, where `family_name` arrives twice with nothing to tell the two
+// apart.
+//
+// `label` is optional because only the EUDI tab has a name worth showing (the
+// DCQL query id, plus the docType or vct it asked for). The IRMA and Veramo tabs
+// pass none and render exactly as they did.
+export interface DisclosureGroup {
+  label?: string
+  disclosures: DisclosureContent[]
+}
+
 export interface Preset {
   label: string
+  // Optional heading in the preset picker. A tab whose presets set none renders
+  // one flat list, as before.
+  group?: string
   request: object
 }
 
@@ -33,8 +52,8 @@ interface TabBase {
 
 export interface VerifierSessionResult {
   walletLink?: string
-  poll?: () => Promise<DisclosureContent[][] | null>
-  disclosures?: DisclosureContent[][]
+  poll?: () => Promise<DisclosureGroup[] | null>
+  disclosures?: DisclosureGroup[]
 }
 
 export interface IssuanceComplete {

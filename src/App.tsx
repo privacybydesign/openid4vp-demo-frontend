@@ -5,7 +5,7 @@ import type {
   TabId,
   TabGroupId,
   IssuerMode,
-  DisclosureContent,
+  DisclosureGroup,
   IssuanceComplete,
   VerifierSessionResult,
   IssuerSessionResult,
@@ -144,7 +144,7 @@ function App() {
   const [linkForm, setLinkForm] = useState<LinkForm>(initial.linkForm)
   const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
   const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
-  const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
+  const [walletResponse, setWalletResponse] = useState<DisclosureGroup[]>([])
   const [issuanceResult, setIssuanceResult] = useState<IssuanceComplete | null>(null)
   const [walletLink, setWalletLink] = useState("")
   const [txCode, setTxCode] = useState<string | undefined>(undefined)

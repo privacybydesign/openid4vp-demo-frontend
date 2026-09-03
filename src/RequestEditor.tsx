@@ -25,6 +25,29 @@ interface RequestEditorProps {
   onStart: () => void
 }
 
+// A run of adjacent presets sharing a `group` becomes one <optgroup>; presets
+// with no group stay bare options. Authored order is preserved and the original
+// index is kept as the option value, because that is what selectPreset indexes —
+// so same-group presets have to be adjacent in the list, which is how they read
+// anyway.
+interface PresetChunk {
+  group?: string
+  items: { preset: Preset; index: number }[]
+}
+
+function chunkPresets(presets: Preset[]): PresetChunk[] {
+  const chunks: PresetChunk[] = []
+  presets.forEach((preset, index) => {
+    const last = chunks[chunks.length - 1]
+    if (last && last.group === preset.group) {
+      last.items.push({ preset, index })
+    } else {
+      chunks.push({ group: preset.group, items: [{ preset, index }] })
+    }
+  })
+  return chunks
+}
+
 // On the IRMA verifier tab the default form runs the session through the yivi
 // popup instead of showing a scheme link. The IRMA issuer tab does not: it always
 // shows the link, so its scheme option is named like everyone else's.
@@ -103,11 +126,23 @@ export default function RequestEditor({
             <option value="" disabled>
               Load preset...
             </option>
-            {presets.map((p, i) => (
-              <option key={i} value={i}>
-                {p.label}
-              </option>
-            ))}
+            {chunkPresets(presets).map((chunk, ci) =>
+              chunk.group ? (
+                <optgroup key={ci} label={chunk.group}>
+                  {chunk.items.map(({ preset, index }) => (
+                    <option key={index} value={index}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                chunk.items.map(({ preset, index }) => (
+                  <option key={index} value={index}>
+                    {preset.label}
+                  </option>
+                ))
+              )
+            )}
           </select>
         )}
         <button className="btn-primary" onClick={onStart}>
