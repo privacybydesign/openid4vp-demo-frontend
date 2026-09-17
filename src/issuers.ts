@@ -1,5 +1,6 @@
 import type { IssuerTabConfig, IssuerModeConfig, IssuerSessionResult, Preset } from "./tabs"
 import { startIrmaSession, irmaWalletLink, pollIrmaSession } from "./irma"
+import { MDL_PORTRAIT_JPEG, AAMVA_MDL_PORTRAIT_PNG, PHOTOID_PORTRAIT_JPEG } from "./portraits"
 
 // The issuer admin token and the real upstream issuer names live on the backend
 // proxy (see server.js). The browser addresses issuers by an allow-listed key
@@ -250,15 +251,9 @@ const JANE_FAMILY_NAME = "Doe"
 const JANE_GIVEN_NAME = "Jane"
 const JANE_BIRTH_DATE = "1990-05-19"
 
-// A one-pixel PNG in url-safe base64. The issuer runs `urlsafe_b64decode` over
-// portrait, picture and the signature elements before signing (formatter_func.py),
-// so the element lands as a CBOR byte string — and a payload containing + or /
-// would not survive that decode. The metadata calls this element a jpeg;
-// `value_type` is advisory and nothing coerces it, so a PNG is what gets signed,
-// which is why the response view sniffs the magic bytes rather than trusting the
-// element name.
-const ONE_PIXEL_PNG =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+// The three portraits, one per credential that carries one, in url-safe base64.
+// See portraits.ts for why they differ from each other in person, size and
+// format, and for the encoding constraint the issuer imposes.
 
 // Upstream's thirteen thresholds — what the reference issuer's own metadata
 // declares, and what an age-verification rulebook would carry. The deployed
@@ -415,7 +410,7 @@ const eudiCredentials: EudiCredentialSpec[] = [
       given_name: JANE_GIVEN_NAME,
       birth_date: JANE_BIRTH_DATE,
       document_number: "X1234",
-      portrait: ONE_PIXEL_PNG,
+      portrait: MDL_PORTRAIT_JPEG,
       driving_privileges: [{ vehicle_category_code: "B" }],
       sex: 2,
       nationality: "NL",
@@ -442,7 +437,7 @@ const eudiCredentials: EudiCredentialSpec[] = [
       given_name: JANE_GIVEN_NAME,
       birth_date: JANE_BIRTH_DATE,
       document_number: "X1234",
-      portrait: ONE_PIXEL_PNG,
+      portrait: AAMVA_MDL_PORTRAIT_PNG,
       driving_privileges: [{ vehicle_category_code: "B" }],
       family_name_truncation: "N",
       given_name_truncation: "N",
@@ -463,7 +458,7 @@ const eudiCredentials: EudiCredentialSpec[] = [
     // update_dates_and_special_claims computes it from birth_date — so posting
     // birth_date is what satisfies it, and posting age_over_18 would be ignored.
     data: {
-      portrait: ONE_PIXEL_PNG,
+      portrait: PHOTOID_PORTRAIT_JPEG,
       family_name_unicode: JANE_FAMILY_NAME,
       given_name_unicode: JANE_GIVEN_NAME,
       birth_date: JANE_BIRTH_DATE,
