@@ -15,8 +15,8 @@ credential-free, same-origin routes to the SPA:
 | -------------------------- | -------------------------------------------------- |
 | `POST /api/verifier/offer` | `…/{verifier}/api/create-dcql-offer`               |
 | `GET  /api/verifier/offer/:state` | `…/{verifier}/api/check-offer/{state}`      |
-| `POST /api/did-webverifier/offer` | `…/{verifier}/api/create-dcql-offer`          |
-| `GET  /api/did-webverifier/offer/:state` | `…/{verifier}/api/check-offer/{state}` |
+| `POST /api/didweb-verifier/offer` | `…/{verifier}/api/create-dcql-offer`          |
+| `GET  /api/didweb-verifier/offer/:state` | `…/{verifier}/api/check-offer/{state}` |
 | `POST /api/issuer/:key/offer`       | `…/{issuer}/api/create-offer`             |
 | `POST /api/issuer/:key/offer/check` | `…/{issuer}/api/check-offer`              |
 

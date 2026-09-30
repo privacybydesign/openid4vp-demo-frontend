@@ -1059,7 +1059,7 @@ const veramoPresets: Preset[] = [
 // (different admin token), selected via the "Client Identifier Prefix" radio
 // group.
 function veramoVerifierNameFor(clientIdPrefix: ClientIdPrefix): string {
-  return clientIdPrefix === "did:web" ? 'didweb-verifier' : 'verifier'
+  return clientIdPrefix === "did:web" ? "didweb-verifier" : "verifier"
 }
 
 export const veramoVerifier: VerifierTabConfig = {
