@@ -73,11 +73,14 @@ export interface IssuerSessionResult {
   credentialName?: string
 }
 
+export type ClientIdPrefix = "did:jwk" | "did:web"
+
 export interface VerifierTabConfig extends TabBase {
   kind: "verifier"
   defaultRequest: object
   presets?: Preset[]
-  startSession: (request: string, linkForm: LinkForm) => Promise<VerifierSessionResult>
+  clientIdPrefixes?: ClientIdPrefix[]
+  startSession: (request: string, linkForm: LinkForm, clientIdPrefix: ClientIdPrefix) => Promise<VerifierSessionResult>
 }
 
 export interface IssuerModeConfig {

@@ -1,6 +1,7 @@
 import { newPopup } from "@privacybydesign/yivi-frontend"
 import { base64UrlToBase64, parseMdocDeviceResponse } from "./mdoc"
 import type {
+  ClientIdPrefix,
   DisclosureContent,
   DisclosureGroup,
   Preset,
@@ -813,7 +814,7 @@ export const eudiVerifier: VerifierTabConfig = {
 }
 
 // ---------------------------------------------------------------------------
-// Veramo verifier
+// Veramo verifiers (did:jwk + did:web)
 // ---------------------------------------------------------------------------
 
 // The verifier admin token lives on the backend proxy (see server.js); the
@@ -1054,14 +1055,23 @@ const veramoPresets: Preset[] = [
   },
 ]
 
+// The did:jwk verifier and did:web verifier are separate Veramo instances
+// (different admin token), selected via the "Client Identifier Prefix" radio
+// group.
+function veramoVerifierNameFor(clientIdPrefix: ClientIdPrefix): string {
+  return clientIdPrefix === "did:web" ? "didweb-verifier" : "verifier"
+}
+
 export const veramoVerifier: VerifierTabConfig = {
   kind: "verifier",
   tab: "veramo-verifier",
   label: "Veramo",
   defaultRequest: veramoPresets[0].request,
   presets: veramoPresets,
-  startSession: async (request: string) => {
-    const response = await fetch(`/api/verifier/offer`, {
+  clientIdPrefixes: ["did:jwk", "did:web"],
+  startSession: async (request: string, _linkForm: LinkForm, clientIdPrefix: ClientIdPrefix) => {
+    const verifierName = veramoVerifierNameFor(clientIdPrefix)
+    const response = await fetch(`/api/${verifierName}/offer`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1083,7 +1093,7 @@ export const veramoVerifier: VerifierTabConfig = {
     return {
       walletLink: json.requestUri,
       poll: async () => {
-        const result = await fetch(`/api/verifier/offer/${encodeURIComponent(state)}`)
+        const result = await fetch(`/api/${verifierName}/offer/${encodeURIComponent(state)}`)
         if (result.status !== 200) return null
 
         const response = await result.json()
