@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:25-alpine
 
 # Cache-buster for the two upgrade layers below. Both resolve "whatever upstream
 # publishes today", so a layer restored from the GitHub Actions cache keeps
