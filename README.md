@@ -1,34 +1,105 @@
-# Digital Credentials API Demo
+# openid4vp-demo-frontend
 
-Demo application showcasing the [Digital Credentials API](https://wicg.github.io/digital-credentials/) for requesting verifiable credentials using OpenID4VP protocol.
+A small Vite + React tool for exercising the Yivi verifier and Veramo
+verifier/issuer flows (IRMA, EUDI, Veramo Verifier, Veramo Issuer tabs).
 
-## Overview
+## Architecture
 
-This demo integrates with the Yivi wallet to request and receive credentials through the Android Digital Credentials API.
+The Veramo verifier/issuer flows require admin bearer tokens. Those tokens are
+**never exposed to the browser** — they would be readable by anyone if inlined
+into the client bundle. Instead a small backend-for-frontend (BFF) proxy
+(`server.js`, routes in `apiProxy.js`) holds the tokens server-side and exposes
+credential-free, same-origin routes to the SPA:
 
-The Digital Credentials tab sends an unsigned OpenID4VP request (`openid4vp-v1-unsigned`, response mode `dc_api`) straight from the page, without the verifier backend. Yivi shows the site by its origin, as an unknown party, and the page displays the response without verifying it.
+| Browser calls              | Proxied to (with `Bearer` token)                   |
+| -------------------------- | -------------------------------------------------- |
+| `POST /api/verifier/offer` | `…/{verifier}/api/create-dcql-offer`               |
+| `GET  /api/verifier/offer/:state` | `…/{verifier}/api/check-offer/{state}`      |
+| `POST /api/didweb-verifier/offer` | `…/{verifier}/api/create-dcql-offer`          |
+| `GET  /api/didweb-verifier/offer/:state` | `…/{verifier}/api/check-offer/{state}` |
+| `POST /api/issuer/:key/offer`       | `…/{issuer}/api/create-offer`             |
+| `POST /api/issuer/:key/offer/check` | `…/{issuer}/api/check-offer`              |
 
-You pick the credential and its attributes from the credential types of the `pbdf` scheme that are still issued; the Yivi app registers the scheme's credential types with the Android Credential Manager. The list is in `src/pbdfCredentials.json`; regenerate it from a checkout of the scheme with:
+`:key` is an allow-listed issuer key (`pre-auth` \| `authcode`) mapped to a real
+issuer name server-side. The same proxy is mounted on the Vite dev server (via
+`vite.config.ts`), so local dev behaves like production.
 
-```bash
-scripts/generate-pbdf-credentials.py path/to/irma_configuration/pbdf
-```
+## Running
 
-## Requirements
+Both run paths point at the same staging backends; pick whichever is more
+convenient.
 
-- Chrome 128+ on Android
-- Enable `chrome://flags/#digital-credentials`
-- Yivi app with Digital Credentials support
-- HTTPS connection (or localhost for development)
+### Local (`npm run dev`)
 
-## Development
-
-```bash
+```sh
 npm install
 npm run dev
 ```
 
-## Documentation
+Vite picks up `.env` automatically (including the server-only vars used by the
+dev proxy), so the staging URLs are pre-wired. Open http://localhost:5173/.
 
-- [Digital Credentials API Specification](https://wicg.github.io/digital-credentials/)
-- [OpenID for Verifiable Presentations](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
+### Docker
+
+```sh
+docker compose up --build
+```
+
+`docker-compose.yml` injects the config through `entry-point.sh`, which builds
+the SPA and serves it behind the BFF (`npm start`). Open http://localhost:8080/.
+
+## Configuration
+
+`.env` defines the staging endpoints the app talks to. Copy `.env.example` and
+override any of the following to point at a different environment.
+
+**Public** (`VITE_`-prefixed — inlined into the client bundle; never a secret):
+
+| Var                         | Used by                              |
+| --------------------------- | ------------------------------------ |
+| `VITE_API_URL`              | OpenID4VP verifier API (IRMA / EUDI) |
+| `VITE_VERAMO_ISSUER_API_URL`| Veramo issuer base (VCT display URL) |
+| `VITE_IRMA_SERVER_URL`      | IRMA server (status / cancel)        |
+| `VITE_UNIVERSAL_LINK_HOST`  | Host for OpenID4VC universal links (default `open.yivi.app`) |
+
+**Server-only** (no `VITE_` prefix — read by the BFF proxy, never sent to the browser):
+
+| Var                             | Used by                                 |
+| ------------------------------- | --------------------------------------- |
+| `VERAMO_API_URL`                | Veramo verifier API                     |
+| `VERAMO_VERIFIER_NAME`          | Veramo verifier instance name           |
+| `VERAMO_ADMIN_TOKEN`            | Veramo verifier admin token (secret)    |
+| `VERAMO_DIDWEB_VERIFIER_NAME`   | Veramo verifier instance name (did:web) |
+| `VERAMO_DIDWEB_ADMIN_TOKEN`     | Veramo verifier admin token (did:web)   |
+| `VERAMO_ISSUER_API_URL`         | Veramo issuer API                       |
+| `VERAMO_ISSUER_NAME`            | Issuer name for the `pre-auth` key      |
+| `VERAMO_AUTHCODE_ISSUER_NAME`   | Issuer name for the `authcode` key      |
+| `VERAMO_ISSUER_ADMIN_TOKEN`     | Veramo issuer admin token (secret)      |
+
+## Digital Credentials API tab
+
+The Verifier > Digital Credentials API tab asks the Yivi wallet for a credential
+through the [Digital Credentials API](https://wicg.github.io/digital-credentials/),
+with an unsigned OpenID4VP request (`openid4vp-v1-unsigned`, response mode
+`dc_api`) sent straight from the page. The verifier backend is not involved. Yivi
+shows the site by its origin, as an unknown party, and the page shows the response
+without verifying it.
+
+You pick the credential and its attributes from the credential types of the `pbdf`
+scheme that are still issued, because the Yivi app registers those with the
+Android Credential Manager. The list is in `src/pbdfCredentials.json`; regenerate
+it from a checkout of the scheme with:
+
+```sh
+scripts/generate-pbdf-credentials.py path/to/irma_configuration/pbdf
+```
+
+It needs Chrome 128+ on Android with `chrome://flags/#digital-credentials`
+enabled, the Yivi app with Digital Credentials support, and HTTPS (or localhost).
+
+## Build / lint
+
+```sh
+npm run build   # tsc -b && vite build
+npm run lint
+```

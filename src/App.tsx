@@ -1,222 +1,415 @@
-import { useState } from 'react'
-import './App.css'
-import { Editor } from '@monaco-editor/react'
-import QRCodeComponent from './QrCodeComponent'
-import DigitalCredentialsDemo from './DigitalCredentialsDemo'
+import { useCallback, useEffect, useState } from "react"
+import "./App.css"
+import { tabs, tabGroups, findTab, groupOfTab, issuerModes, resolveMode } from "./tabs"
+import type {
+  TabId,
+  TabGroupId,
+  IssuerMode,
+  DisclosureGroup,
+  IssuanceComplete,
+  VerifierSessionResult,
+  IssuerSessionResult,
+  ClientIdPrefix,
+} from "./tabs"
+import compactJson from "./compactJson"
+import TabBar from "./TabBar"
+import RequestEditor from "./RequestEditor"
+import SessionPoller from "./SessionPoller"
+import WalletResponseView from "./WalletResponseView"
+import IssuerSessionPoller from "./IssuerSessionPoller"
+import IssuanceCompleteView from "./IssuanceCompleteView"
+import ErrorView from "./ErrorView"
+import DigitalCredentialsDemo from "./DigitalCredentialsDemo"
+import { applyLinkForm } from "./walletLink"
+import type { LinkForm } from "./walletLink"
 
-const request = {
-  "type": "vp_token",
-  "dcql_query": {
-    "credentials": [
-      {
-        "id": "mobilenumber",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": ["pbdf-staging.sidn-pbdf.mobilenumber"]
-        },
-        "claims": [
-          {
-            "id": "mn",
-            "path": ["mobilenumber"]
-          }
-        ]
-      },
-    ],
-  },
-  "nonce": "nonce",
-  "jar_mode": "by_reference",
-  "request_uri_method": "post",
-  "issuer_chain": "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----",
-}
+const UNIVERSAL_LINK_HOST = import.meta.env.VITE_UNIVERSAL_LINK_HOST || "open.yivi.app"
+const UNIVERSAL_LINK_HOST_STAGING = import.meta.env.VITE_UNIVERSAL_LINK_HOST_STAGING || "open.staging.yivi.app"
+const ALL_LINK_FORMS: LinkForm[] = ["scheme", "universal", "universal-staging"]
+const DEFAULT_LINK_FORM: LinkForm = "scheme"
+const ALL_CLIENT_ID_PREFIXES: ClientIdPrefix[] = ["did:jwk", "did:web"]
+const DEFAULT_CLIENT_ID_PREFIX: ClientIdPrefix = "did:jwk"
 
-function createWalletLink(data: any): string {
-  const params = new URLSearchParams(data)
-  const customUrl = `eudi-openid4vp://?${params}`
-  return customUrl
-}
-
-function openWallet(link: string) {
-  window.location.href = link
+function hostForLinkForm(form: LinkForm): string {
+  return form === "universal-staging" ? UNIVERSAL_LINK_HOST_STAGING : UNIVERSAL_LINK_HOST
 }
 
 const FrontendState = {
-  Pending: 'Pending',
-  Polling: 'Polling',
-  Done: 'Done',
+  Pending: "Pending",
+  Polling: "Polling",
+  Done: "Done",
+  Error: "Error",
 } as const
-
 type FrontendState = typeof FrontendState[keyof typeof FrontendState]
 
-interface DisclosureContent {
-  key: string;
-  value: string;
+const ALL_ISSUER_MODES: IssuerMode[] = ["pre-authorized-code", "authorization-code", "irma-issuance"]
+
+function defaultRequestFor(tabId: TabId, mode: IssuerMode | null): string {
+  const tab = findTab(tabId)
+  if (tab.kind === "issuer") {
+    return compactJson(resolveMode(tab, mode ?? tab.defaultMode).defaultRequest)
+  }
+  if (tab.kind === "dc-api") return ""
+  return compactJson(tab.defaultRequest)
 }
 
-function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
-  const components = sdjwt.split("~")
-  const disclosures = (components.slice(1, components.length - 1).map((value) => {
-    return atob(value)
-  }) as string[])
+const allTabs = tabs.map((t) => t.tab)
 
-
-  return disclosures.map((value) => {
-    const res = JSON.parse(value) as string[]
-    return { key: res[1], value: res[2] }
-  })
+// Tab ids as they were before the tabs were grouped, so links shared back then
+// still land where they used to.
+const LEGACY_TAB_IDS: Record<string, TabId> = {
+  irma: "irma-verifier",
+  eudi: "eudi-verifier",
 }
 
-const DemoTab = {
-  QRCode: 'QRCode',
-  DigitalCredentials: 'DigitalCredentials',
-} as const
+// Where a visit with no (or an unrecognised) ?tab= lands. Stated outright rather
+// than derived from the first group, so reordering the tab bar does not silently
+// move where the tool opens.
+const DEFAULT_TAB: TabId = "irma-issuer"
 
-type DemoTab = typeof DemoTab[keyof typeof DemoTab]
+// Where switching to a group lands before it has been visited.
+const firstTabPerGroup = Object.fromEntries(
+  tabGroups.map((g) => [g.id, g.tabs[0].tab])
+) as Record<TabGroupId, TabId>
+
+// One request per tab, not per (tab, mode): RequestEditor only remounts when
+// activeTab changes, so keying any finer would leave the editor showing text that
+// is no longer the state. Switching mode therefore keeps whatever is in the
+// editor, which is also what this tool did before it had a second issuer tab.
+const defaultRequestPerTab = Object.fromEntries(
+  tabs.map((t) => [t.tab, defaultRequestFor(t.tab, null)])
+) as Record<TabId, string>
+
+const defaultIssuerMode: IssuerMode = "pre-authorized-code"
+
+function readStateFromUrl(): {
+  tab: TabId
+  mode: IssuerMode
+  linkForm: LinkForm
+  clientIdPrefix: ClientIdPrefix
+  requestPerTab: Record<TabId, string>
+} {
+  const params = new URLSearchParams(window.location.search)
+
+  const tabParam = params.get("tab") ?? ""
+  const named = (LEGACY_TAB_IDS[tabParam] ?? tabParam) as TabId
+  const tab: TabId = allTabs.includes(named) ? named : DEFAULT_TAB
+
+  const modeParam = params.get("mode")
+  const mode: IssuerMode = ALL_ISSUER_MODES.includes(modeParam as IssuerMode)
+    ? (modeParam as IssuerMode)
+    : defaultIssuerMode
+
+  const linkParam = params.get("link")
+  const linkForm: LinkForm = ALL_LINK_FORMS.includes(linkParam as LinkForm)
+    ? (linkParam as LinkForm)
+    : DEFAULT_LINK_FORM
+
+  const prefixParam = params.get("prefix")
+  const clientIdPrefix: ClientIdPrefix = ALL_CLIENT_ID_PREFIXES.includes(prefixParam as ClientIdPrefix)
+    ? (prefixParam as ClientIdPrefix)
+    : DEFAULT_CLIENT_ID_PREFIX
+
+  const requestPerTab = { ...defaultRequestPerTab }
+
+  const requestParam = params.get("request")
+  if (requestParam) {
+    try {
+      requestPerTab[tab] = atob(requestParam)
+    } catch { /* ignore invalid base64 */ }
+  }
+
+  return { tab, mode, linkForm, clientIdPrefix, requestPerTab }
+}
+
+function writeStateToUrl(
+  tab: TabId,
+  mode: IssuerMode,
+  linkForm: LinkForm,
+  clientIdPrefix: ClientIdPrefix,
+  request: string
+) {
+  const params = new URLSearchParams()
+  params.set("tab", tab)
+
+  const tabConfig = findTab(tab)
+  const isDefault = request === defaultRequestFor(tab, mode)
+  // Only worth carrying when the tab has more than one flow to name.
+  if (tabConfig.kind === "issuer" && issuerModes(tabConfig).length > 1) {
+    params.set("mode", mode)
+  }
+  if (linkForm !== DEFAULT_LINK_FORM) {
+    params.set("link", linkForm)
+  }
+  if (tab === "veramo-verifier" && clientIdPrefix !== DEFAULT_CLIENT_ID_PREFIX) {
+    params.set("prefix", clientIdPrefix)
+  }
+  if (!isDefault) {
+    params.set("request", btoa(request))
+  }
+
+  window.history.replaceState(null, "", `?${params}`)
+}
 
 function App() {
-  const [activeTab, setActiveTab] = useState<DemoTab>(DemoTab.QRCode)
+  const initial = readStateFromUrl()
+  const [activeTab, setActiveTab] = useState<TabId>(initial.tab)
+  // Which tab each group returns to, so moving between Verifier and Issuer keeps
+  // your place in both rather than resetting to the first tab.
+  const [lastTabPerGroup, setLastTabPerGroup] = useState<Record<TabGroupId, TabId>>({
+    ...firstTabPerGroup,
+    [groupOfTab(initial.tab).id]: initial.tab,
+  })
+  const [activeMode, setActiveMode] = useState<IssuerMode>(initial.mode)
+  const [linkForm, setLinkForm] = useState<LinkForm>(initial.linkForm)
+  const [clientIdPrefix, setClientIdPrefix] = useState<ClientIdPrefix>(initial.clientIdPrefix)
   const [frontendState, setFrontendState] = useState<FrontendState>(FrontendState.Pending)
-  const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | null>(null)
-  const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
-  const [sessionRequest, setSessionRequest] = useState(JSON.stringify(request, null, 4));
+  const [pollingCallbackId, setPollingCallbackId] = useState<ReturnType<typeof setInterval> | undefined>(undefined)
+  const [walletResponse, setWalletResponse] = useState<DisclosureGroup[]>([])
+  const [issuanceResult, setIssuanceResult] = useState<IssuanceComplete | null>(null)
   const [walletLink, setWalletLink] = useState("")
+  const [txCode, setTxCode] = useState<string | undefined>(undefined)
+  const [errorMessage, setErrorMessage] = useState<string>("")
+  const [requestPerTab, setRequestPerTab] = useState(initial.requestPerTab)
+  // Set for issuer tabs whose issuer has no offer state to poll: the finish is the
+  // operator's assertion, so the name to show has to be decided up front.
+  const [pendingCredentialName, setPendingCredentialName] = useState<string | undefined>(undefined)
+  // Tracked explicitly rather than inferred from pollingCallbackId, which is not
+  // cleared on cancel and would leave a stale id behind after a polled session.
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false)
+  // Whether the Done state rests on the issuer saying so, or on the operator.
+  const [issuanceObserved, setIssuanceObserved] = useState(true)
 
-  const startSession = async (request: string) => {
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/ui/presentations`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: request,
-      }
-    )
-    const json = await response.json()
-    console.log(`response: ${json}`)
+  const tab = findTab(activeTab)
+  const currentRequest = requestPerTab[activeTab]
+  const displayedLink = applyLinkForm(walletLink, linkForm, hostForLinkForm(linkForm))
 
-    setWalletLink(createWalletLink(json))
+  const updateUrl = useCallback(
+    (tab: TabId, mode: IssuerMode, linkForm: LinkForm, clientIdPrefix: ClientIdPrefix, request: string) => {
+      writeStateToUrl(tab, mode, linkForm, clientIdPrefix, request)
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (frontendState === FrontendState.Pending) {
+      updateUrl(activeTab, activeMode, linkForm, clientIdPrefix, currentRequest)
+    }
+  }, [activeTab, activeMode, linkForm, clientIdPrefix, currentRequest, frontendState, updateUrl])
+
+  const switchTab = (next: TabId) => {
+    if (frontendState !== FrontendState.Pending) return
+    setActiveTab(next)
+    setLastTabPerGroup((prev) => ({ ...prev, [groupOfTab(next).id]: next }))
+  }
+
+  const switchGroup = (next: TabGroupId) => {
+    switchTab(lastTabPerGroup[next])
+  }
+
+  const switchMode = (next: IssuerMode) => {
+    if (frontendState !== FrontendState.Pending) return
+    setActiveMode(next)
+  }
+
+  const switchLinkForm = (next: LinkForm) => {
+    if (frontendState !== FrontendState.Pending) return
+    setLinkForm(next)
+  }
+
+  const switchClientIdPrefix = (next: ClientIdPrefix) => {
+    if (frontendState !== FrontendState.Pending) return
+    setClientIdPrefix(next)
+  }
+
+  const changeRequest = (value: string) => {
+    setRequestPerTab((prev) => ({ ...prev, [activeTab]: value }))
+  }
+
+  const showError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error)
+    setErrorMessage(message)
+    setFrontendState(FrontendState.Error)
+  }
+
+  const startVerifierSession = async (session: VerifierSessionResult) => {
+    if (session.disclosures) {
+      setWalletResponse(session.disclosures)
+      setFrontendState(FrontendState.Done)
+      return
+    }
+
+    setWalletLink(session.walletLink!)
     setFrontendState(FrontendState.Polling)
 
-    const transactionId = json["transaction_id"]
-    const id = setInterval(() => {
-      (async () => {
-        const result = await fetch(`${import.meta.env.VITE_API_URL}/ui/presentations/${transactionId}`)
-
-        if (result.status == 200) {
-          setFrontendState(FrontendState.Done)
+    const id = setInterval(async () => {
+      try {
+        const result = await session.poll!()
+        if (result) {
           clearInterval(id)
-          const response = await result.json()
-          const entries = new Map<string, string[]>(Object.entries(response["vp_token"]))
-          const parsed = Array.from(entries, ([_, sdjwts]) => {
-            return sdjwts.map(parseSdJwtVc).flat()
-          })
-          setWalletResponse(parsed)
+          setWalletResponse(result)
+          setFrontendState(FrontendState.Done)
         }
-      })()
-
+      } catch (error) {
+        clearInterval(id)
+        showError(error)
+      }
     }, 500)
 
     setPollingCallbackId(id)
   }
 
-  const cancel = () => {
-    setFrontendState(FrontendState.Pending)
-    if (pollingCallbackId) {
-      clearInterval(pollingCallbackId)
+  const startIssuerSession = async (session: IssuerSessionResult) => {
+    setWalletLink(session.walletLink)
+    setTxCode(session.txCode)
+    setPendingCredentialName(session.credentialName)
+    setFrontendState(FrontendState.Polling)
+
+    // No poll means the issuer keeps no offer state to ask about, so there is
+    // nothing to watch and no interval to start. The poller renders a confirm
+    // button instead, and `confirmIssuance` below ends the session.
+    if (!session.poll) {
+      setAwaitingConfirmation(true)
+      return
+    }
+
+    const poll = session.poll
+    const id = setInterval(async () => {
+      try {
+        const result = await poll()
+        if (result) {
+          clearInterval(id)
+          setIssuanceObserved(true)
+          setIssuanceResult(result)
+          setFrontendState(FrontendState.Done)
+        }
+      } catch (error) {
+        clearInterval(id)
+        showError(error)
+      }
+    }, 500)
+
+    setPollingCallbackId(id)
+  }
+
+  const startSession = async () => {
+    try {
+      if (tab.kind === "verifier") {
+        const session = await tab.startSession(currentRequest, linkForm, clientIdPrefix)
+        await startVerifierSession(session)
+      } else if (tab.kind === "issuer") {
+        const session = await resolveMode(tab, activeMode).startSession(currentRequest)
+        await startIssuerSession(session)
+      }
+    } catch (error) {
+      showError(error)
     }
   }
 
-  const reset = () => setFrontendState(FrontendState.Pending)
+  // The operator saying the wallet has the credential, for issuers that cannot be
+  // asked. Deliberately not dressed up as an observation: the success view names
+  // the credential that was offered, which is all anyone here actually knows.
+  const confirmIssuance = () => {
+    setAwaitingConfirmation(false)
+    setIssuanceObserved(false)
+    setIssuanceResult({ credentialName: pendingCredentialName ?? "Credential" })
+    setFrontendState(FrontendState.Done)
+  }
+
+  const cancel = () => {
+    clearInterval(pollingCallbackId)
+    setPollingCallbackId(undefined)
+    setAwaitingConfirmation(false)
+    setFrontendState(FrontendState.Pending)
+    setTxCode(undefined)
+  }
+
+  const reset = () => {
+    clearInterval(pollingCallbackId)
+    setPollingCallbackId(undefined)
+    setAwaitingConfirmation(false)
+    setFrontendState(FrontendState.Pending)
+    setTxCode(undefined)
+    setIssuanceResult(null)
+    setErrorMessage("")
+  }
+
+  // Only the modes this tab actually declares, and only worth a switcher when
+  // there is a choice to make.
+  const subModes = tab.kind === "issuer" && issuerModes(tab).length > 1
+    ? issuerModes(tab).map((id) => ({ id, label: tab.modes[id]!.label }))
+    : undefined
+  const presets =
+    tab.kind === "issuer" ? resolveMode(tab, activeMode).presets : tab.kind === "verifier" ? tab.presets : undefined
+  const clientIdPrefixes = tab.kind === "verifier" ? tab.clientIdPrefixes : undefined
 
   return (
-    <div className="w-screen h-screen flex flex-col">
-      <div className="border-b border-gray-200">
-        <nav className="flex space-x-4 px-6" aria-label="Tabs">
-          <button
-            onClick={() => setActiveTab(DemoTab.QRCode)}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === DemoTab.QRCode
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            QR Code Demo
-          </button>
-          <button
-            onClick={() => setActiveTab(DemoTab.DigitalCredentials)}
-            className={`py-4 px-1 border-b-2 font-medium text-sm ${
-              activeTab === DemoTab.DigitalCredentials
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Digital Credentials API Demo
-          </button>
-        </nav>
+    <div className="h-full flex flex-col">
+      <header className="bg-white border-b border-[#CFE4EF] flex items-center px-4 py-4 gap-4">
+        <img src="/yivi-logo.svg" alt="Yivi" className="h-10" />
+        <h1 className="text-lg font-bold text-[#484747] m-0">Session Tool</h1>
+      </header>
+
+      <div className="flex-1 flex flex-col items-center w-full px-3 py-4 md:px-6 md:py-6 overflow-y-auto md:overflow-hidden">
+        <TabBar
+          groups={tabGroups}
+          activeTab={activeTab}
+          onSwitchGroup={switchGroup}
+          onSwitch={switchTab}
+        />
+
+        {tab.kind === "dc-api" && <DigitalCredentialsDemo />}
+
+        {tab.kind !== "dc-api" && frontendState === FrontendState.Pending && (
+          <RequestEditor
+            activeTab={activeTab}
+            defaultValue={currentRequest}
+            presets={presets}
+            subModes={subModes}
+            activeSubMode={tab.kind === "issuer" ? activeMode : undefined}
+            onSubModeChange={(id) => switchMode(id as IssuerMode)}
+            linkForm={linkForm}
+            onLinkFormChange={switchLinkForm}
+            clientIdPrefixes={clientIdPrefixes}
+            clientIdPrefix={clientIdPrefix}
+            onClientIdPrefixChange={switchClientIdPrefix}
+            onChange={changeRequest}
+            onStart={startSession}
+          />
+        )}
+
+        {frontendState === FrontendState.Polling && tab.kind === "verifier" && (
+          <SessionPoller walletLink={displayedLink} linkForm={linkForm} onCancel={cancel} />
+        )}
+
+        {frontendState === FrontendState.Polling && tab.kind === "issuer" && (
+          <IssuerSessionPoller
+            walletLink={displayedLink}
+            linkForm={linkForm}
+            txCode={txCode}
+            onCancel={cancel}
+            onConfirm={awaitingConfirmation ? confirmIssuance : undefined}
+          />
+        )}
+
+        {frontendState === FrontendState.Done && tab.kind === "verifier" && (
+          <WalletResponseView disclosures={walletResponse} onReset={reset} />
+        )}
+
+        {frontendState === FrontendState.Done && tab.kind === "issuer" && issuanceResult && (
+          <IssuanceCompleteView
+            credentialName={issuanceResult.credentialName}
+            observed={issuanceObserved}
+            onReset={reset}
+          />
+        )}
+
+        {frontendState === FrontendState.Error && (
+          <ErrorView message={errorMessage} onReset={reset} />
+        )}
       </div>
-
-      {activeTab === DemoTab.QRCode && (
-        <div className="flex-1 flex items-center flex-col align-center">
-          <h2 className="text-3xl mt-4">Yivi OpenID4VP Verifier</h2>
-          {frontendState == FrontendState.Pending &&
-            <div className="h-full w-full flex items-center flex-col">
-              <button className="m-5" onClick={() => startSession(sessionRequest)}>
-                Start Session
-              </button>
-              <Editor
-                height="100%"
-                width="100%"
-                defaultLanguage="json"
-                defaultValue={sessionRequest}
-                theme="vs-dark"
-                onChange={(value) => setSessionRequest(value ?? '')}
-                options={{
-                  automaticLayout: true,
-                  minimap: { enabled: false },
-                  formatOnPaste: true,
-                  formatOnType: true,
-                }}
-              />
-            </div>
-          }
-          {frontendState == FrontendState.Polling && (
-            <div>
-              <button onClick={() => openWallet(walletLink)}>Open Yivi</button>
-              <QRCodeComponent text={walletLink} />
-              <button className="m-5" onClick={cancel}>Cancel</button>
-            </div>
-          )}
-          {frontendState == FrontendState.Done &&
-            <div>
-              <WalletResponseView disclosures={walletResponse} />
-              <button className="m-5" onClick={reset}>Reset</button>
-            </div>}
-        </div>
-      )}
-
-      {activeTab === DemoTab.DigitalCredentials && <DigitalCredentialsDemo />}
     </div>
   )
-}
-
-interface WalletResponseViewProps {
-  disclosures: DisclosureContent[][]
-}
-
-const WalletResponseView = (disclosures: WalletResponseViewProps) => {
-  const discs = disclosures.disclosures.flat()
-  return (
-    <div className="max-w-md mx-auto mt-6 border border-gray-200 rounded-md shadow-sm">
-      <dl className="divide-y divide-gray-200">
-        {discs.map(({ key, value }) => (
-          <div key={key} className="flex justify-between px-4 py-3 bg-white">
-            <dt className="text-gray-600 font-medium">{key}</dt>
-            <dd className="text-gray-900">{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
 }
 
 export default App

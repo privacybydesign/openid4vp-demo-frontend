@@ -1,7 +1,12 @@
-import { useMemo, useState } from 'react'
-import { Editor } from '@monaco-editor/react'
-import './App.css'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { EditorView, basicSetup } from 'codemirror'
+import { json } from '@codemirror/lang-json'
+import { catppuccinLatte } from '@catppuccin/codemirror'
+import { EditorState } from '@codemirror/state'
 import pbdfCredentials from './pbdfCredentials.json'
+import ErrorView from './ErrorView'
+import WalletResponseView from './WalletResponseView'
+import type { DisclosureContent } from './tabs'
 
 // The Yivi app registers the credential types of the pbdf scheme with the
 // Android Credential Manager, so these are the credentials this page can ask
@@ -31,11 +36,6 @@ const DemoState = {
 } as const
 
 type DemoState = typeof DemoState[keyof typeof DemoState]
-
-interface DisclosureContent {
-  key: string
-  value: string
-}
 
 function randomNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
@@ -88,6 +88,61 @@ function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
 
 function defaultAttributeIds(credential: CredentialType): string[] {
   return credential.attributes.slice(0, 1).map((attribute) => attribute.id)
+}
+
+interface JsonEditorProps {
+  value: string
+  onChange: (value: string) => void
+}
+
+// Controlled, unlike RequestEditor: picking a credential rewrites the text
+// while the editor stays mounted.
+function JsonEditor({ value, onChange }: JsonEditorProps) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView | null>(null)
+  const onChangeRef = useRef(onChange)
+
+  useEffect(() => {
+    onChangeRef.current = onChange
+  })
+
+  useEffect(() => {
+    const view = new EditorView({
+      state: EditorState.create({
+        extensions: [
+          basicSetup,
+          json(),
+          catppuccinLatte,
+          EditorView.lineWrapping,
+          EditorView.theme({
+            '&': { fontSize: '14px' },
+            '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
+          }),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString())
+          }),
+        ],
+      }),
+      parent: hostRef.current!,
+    })
+    viewRef.current = view
+
+    return () => view.destroy()
+  }, [])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || view.state.doc.toString() === value) return
+
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
+  }, [value])
+
+  return (
+    <div
+      ref={hostRef}
+      className="h-[400px] overflow-auto rounded-lg border border-[#CFE4EF] bg-white"
+    />
+  )
 }
 
 function DigitalCredentialsDemo() {
@@ -190,162 +245,104 @@ function DigitalCredentialsDemo() {
   }
 
   return (
-    <div className="flex-1 w-full flex items-center flex-col px-4 pb-8">
-      <h2 className="text-3xl mt-4">Digital Credentials API Demo</h2>
-      <p className="text-sm text-gray-600 max-w-2xl text-center mt-2">
-        Asks the Yivi wallet for a credential through the Digital Credentials API, with an
-        unsigned OpenID4VP request. Yivi shows this site by its origin, as an unknown party.
-      </p>
-      <div className="text-xs text-gray-500 max-w-2xl text-center mt-2 bg-yellow-50 border border-yellow-200 rounded p-2">
-        <strong>Requirements:</strong><br />
-        • Chrome 128+ on Android device<br />
-        • Enable chrome://flags/#digital-credentials<br />
-        • Yivi app installed with Digital Credentials support<br />
-        • Served over HTTPS (or localhost for testing)
-      </div>
+    <div className="flex-1 w-full min-h-0 overflow-y-auto">
+      <div className="w-full max-w-4xl mx-auto flex flex-col gap-4">
+        <p className="text-sm text-[#484747]">
+          Asks the Yivi wallet for a credential through the Digital Credentials API, with an
+          unsigned OpenID4VP request. Yivi shows this site by its origin, as an unknown party.
+        </p>
+        <div className="bg-[#E8F3F9] border border-[#CFE4EF] rounded-md px-4 py-3 text-sm text-[#484747]">
+          <p className="font-semibold">Requirements</p>
+          <ul className="list-disc pl-5">
+            <li>Chrome 128+ on an Android device</li>
+            <li>Enable chrome://flags/#digital-credentials</li>
+            <li>Yivi app installed with Digital Credentials support</li>
+            <li>Served over HTTPS (or localhost for testing)</li>
+          </ul>
+        </div>
 
-      {demoState === DemoState.Ready && (
-        <div className="w-full max-w-4xl flex flex-col mt-6">
-          <label className="text-sm text-gray-600 mb-1" htmlFor="credential-type">
-            Credential
-          </label>
-          <select
-            id="credential-type"
-            className="border border-gray-300 rounded p-2 bg-white text-gray-900"
-            value={credential.id}
-            onChange={(event) => selectCredential(event.target.value)}
-          >
-            {groups.map(([group, types]) => (
-              <optgroup key={group} label={group}>
-                {types.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name} ({type.id})
-                  </option>
+        {demoState === DemoState.Ready && (
+          <>
+            <div className="flex flex-col gap-2">
+              <label className="text-[15px] font-semibold text-[#484747]" htmlFor="credential-type">
+                Credential
+              </label>
+              <select
+                id="credential-type"
+                className="border border-[#CFE4EF] rounded-md px-4 py-[0.65rem] text-[16px] font-semibold text-[#484747] bg-white focus:outline-none focus:border-[#00508a]"
+                value={credential.id}
+                onChange={(event) => selectCredential(event.target.value)}
+              >
+                {groups.map(([group, types]) => (
+                  <optgroup key={group} label={group}>
+                    {types.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name} ({type.id})
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
-              </optgroup>
-            ))}
-          </select>
-
-          <fieldset className="mt-4">
-            <legend className="text-sm text-gray-600 mb-1">Attributes to ask for</legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
-              {credential.attributes.map((attribute) => (
-                <label key={attribute.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={attributeIds.includes(attribute.id)}
-                    onChange={() => toggleAttribute(attribute.id)}
-                  />
-                  <span>{attribute.name}</span>
-                  <code className="text-xs text-gray-500">{attribute.id}</code>
-                </label>
-              ))}
+              </select>
             </div>
-          </fieldset>
 
-          <button
-            className="my-5 self-center"
-            onClick={requestCredential}
-            disabled={attributeIds.length === 0}
-          >
-            Request Credential via Digital Credentials API
-          </button>
+            <fieldset className="flex flex-col gap-2">
+              <legend className="text-[15px] font-semibold text-[#484747] mb-2">Attributes to ask for</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+                {credential.attributes.map((attribute) => (
+                  <label
+                    key={attribute.id}
+                    className="flex items-center gap-1.5 text-[15px] text-[#484747] cursor-pointer select-none"
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-[#00508a]"
+                      checked={attributeIds.includes(attribute.id)}
+                      onChange={() => toggleAttribute(attribute.id)}
+                    />
+                    <span>{attribute.name}</span>
+                    <code className="text-xs">{attribute.id}</code>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
-          <p className="text-sm text-gray-600 mb-2">
-            OpenID4VP request, sent as <code>{PROTOCOL}</code>:
-          </p>
-          <Editor
-            height="400px"
-            width="100%"
-            defaultLanguage="json"
-            value={requestData}
-            theme="vs-dark"
-            onChange={(value) => setRequestData(value ?? '')}
-            options={{
-              automaticLayout: true,
-              minimap: { enabled: false },
-              formatOnPaste: true,
-              formatOnType: true,
-            }}
-          />
-        </div>
-      )}
+            <button
+              className="btn-primary self-start disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={requestCredential}
+              disabled={attributeIds.length === 0}
+            >
+              Request Credential via Digital Credentials API
+            </button>
 
-      {demoState === DemoState.Requesting && (
-        <div className="flex flex-col items-center mt-10">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-          <p className="mt-4 text-gray-600">Waiting for wallet response...</p>
-          <p className="mt-2 text-sm text-gray-500">
-            Android shows its credential picker, and opens Yivi once you choose it
-          </p>
-        </div>
-      )}
+            <p className="text-[15px] font-semibold text-[#484747]">
+              OpenID4VP request, sent as <code>{PROTOCOL}</code>:
+            </p>
+            <JsonEditor value={requestData} onChange={setRequestData} />
+          </>
+        )}
 
-      {demoState === DemoState.Success && (
-        <div className="flex flex-col items-center mt-10 w-full max-w-4xl">
-          <h3 className="text-2xl text-green-600 mb-4">✓ Credential Received!</h3>
+        {demoState === DemoState.Requesting && (
+          <div className="flex flex-col items-center gap-2 mt-4 text-center text-[#484747]">
+            <p className="font-semibold">Waiting for wallet response...</p>
+            <p className="text-sm">Android shows its credential picker, and opens Yivi once you choose it</p>
+          </div>
+        )}
 
-          <div className="w-full mb-6">
-            <h4 className="text-lg font-semibold mb-2">Disclosed Attributes:</h4>
-            <WalletResponseView disclosures={walletResponse} />
-            <p className="text-xs text-gray-500 text-center mt-2">
+        {demoState === DemoState.Success && (
+          <>
+            <WalletResponseView disclosures={[{ disclosures: walletResponse }]} onReset={reset} />
+            <p className="text-xs text-[#484747] text-center">
               Shown as received: this page does not verify the presentation.
             </p>
-          </div>
+            <h3 className="text-[15px] font-semibold text-[#484747]">Raw response</h3>
+            <pre className="p-4 rounded-lg border border-[#CFE4EF] bg-white text-sm whitespace-pre-wrap break-all">
+              {JSON.stringify(responseData, null, 2)}
+            </pre>
+          </>
+        )}
 
-          <div className="w-full">
-            <h4 className="text-lg font-semibold mb-2">Raw Response Data:</h4>
-            <Editor
-              height="300px"
-              width="100%"
-              defaultLanguage="json"
-              value={JSON.stringify(responseData, null, 2)}
-              theme="vs-dark"
-              options={{
-                readOnly: true,
-                automaticLayout: true,
-                minimap: { enabled: false },
-              }}
-            />
-          </div>
-
-          <button className="m-5" onClick={reset}>
-            Start New Request
-          </button>
-        </div>
-      )}
-
-      {demoState === DemoState.Error && (
-        <div className="flex flex-col items-center mt-10 max-w-2xl">
-          <h3 className="text-2xl text-red-600 mb-4">✗ Error</h3>
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-            <strong className="font-bold">Error: </strong>
-            <span className="block sm:inline">{error}</span>
-          </div>
-          <button className="mt-5" onClick={reset}>
-            Try Again
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-interface WalletResponseViewProps {
-  disclosures: DisclosureContent[]
-}
-
-const WalletResponseView = ({ disclosures }: WalletResponseViewProps) => {
-  return (
-    <div className="max-w-md mx-auto border border-gray-200 rounded-md shadow-sm">
-      <dl className="divide-y divide-gray-200">
-        {disclosures.map(({ key, value }) => (
-          <div key={key} className="flex justify-between px-4 py-3 bg-white">
-            <dt className="text-gray-600 font-medium">{key}</dt>
-            <dd className="text-gray-900">{value}</dd>
-          </div>
-        ))}
-      </dl>
+        {demoState === DemoState.Error && <ErrorView message={error} onReset={reset} />}
+      </div>
     </div>
   )
 }

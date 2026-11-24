@@ -1,0 +1,7 @@
+ignore:
+  # Go stdlib vulnerabilities embedded in the Node.js binary.
+  # These are not exploitable in a JavaScript runtime context and
+  # cannot be fixed without an upstream Node.js rebuild.
+  - package:
+      type: go-module
+      name: stdlib
