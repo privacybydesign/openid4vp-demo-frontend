@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Generates src/pbdfCredentials.json from a checkout of the pbdf scheme.
 
-The Yivi app registers every credential type of the pbdf scheme with the
+The Yivi app registers the credential types of the pbdf scheme with the
 Android Credential Manager, so these are the credentials a website can ask
-Yivi for through the Digital Credentials API. Run this again after the scheme
-changes:
+Yivi for through the Digital Credentials API. Deprecated credential types are
+left out. Run this again after the scheme changes:
 
     scripts/generate-pbdf-credentials.py path/to/irma_configuration/pbdf
 """
@@ -35,6 +35,10 @@ def main():
         issuer = ET.parse(issuer_dir / "description.xml").getroot()
         credential = ET.parse(description).getroot()
 
+        # A credential type that is no longer issued is not worth asking for.
+        if credential.find("DeprecatedSince") is not None:
+            continue
+
         attributes = [
             {"id": attribute.get("id"), "name": english(attribute.find("Name"))}
             for attribute in credential.iterfind("Attributes/Attribute")
@@ -51,7 +55,6 @@ def main():
                 ),
                 "name": english(credential.find("Name")),
                 "issuer": english(issuer.find("Name")),
-                "deprecated": credential.find("DeprecatedSince") is not None,
                 "attributes": attributes,
             }
         )

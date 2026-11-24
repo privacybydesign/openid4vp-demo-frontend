@@ -8,7 +8,7 @@ This demo integrates with the Yivi wallet to request and receive credentials thr
 
 The Digital Credentials tab sends an unsigned OpenID4VP request (`openid4vp-v1-unsigned`, response mode `dc_api`) straight from the page, without the verifier backend. Yivi shows the site by its origin, as an unknown party, and the page displays the response without verifying it.
 
-You pick the credential and its attributes from the credential types of the `pbdf` scheme, which are what the Yivi app registers with the Android Credential Manager. The list is in `src/pbdfCredentials.json`; regenerate it from a checkout of the scheme with:
+You pick the credential and its attributes from the credential types of the `pbdf` scheme that are still issued; the Yivi app registers the scheme's credential types with the Android Credential Manager. The list is in `src/pbdfCredentials.json`; regenerate it from a checkout of the scheme with:
 
 ```bash
 scripts/generate-pbdf-credentials.py path/to/irma_configuration/pbdf

@@ -3,14 +3,14 @@ import { Editor } from '@monaco-editor/react'
 import './App.css'
 import pbdfCredentials from './pbdfCredentials.json'
 
-// The Yivi app registers every credential type of the pbdf scheme with the
+// The Yivi app registers the credential types of the pbdf scheme with the
 // Android Credential Manager, so these are the credentials this page can ask
-// for. Regenerate the list with scripts/generate-pbdf-credentials.py.
+// for; the ones that are no longer issued are left out. Regenerate the list
+// with scripts/generate-pbdf-credentials.py.
 interface CredentialType {
   id: string
   name: string
   issuer: string
-  deprecated: boolean
   attributes: { id: string; name: string }[]
 }
 
@@ -106,17 +106,13 @@ function DigitalCredentialsDemo() {
 
   const credential = credentialTypes.find((type) => type.id === credentialId) ?? initialCredential
 
-  // Grouped by issuer, with the credential types that are no longer issued last.
+  // Grouped by issuer.
   const groups = useMemo(() => {
     const byIssuer = new Map<string, CredentialType[]>()
-    for (const type of credentialTypes.filter((type) => !type.deprecated)) {
+    for (const type of credentialTypes) {
       byIssuer.set(type.issuer, [...(byIssuer.get(type.issuer) ?? []), type])
     }
-    const sorted: [string, CredentialType[]][] = [...byIssuer.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-    const deprecated = credentialTypes.filter((type) => type.deprecated)
-    if (deprecated.length > 0) sorted.push(['No longer issued', deprecated])
-    return sorted
+    return [...byIssuer.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [])
 
   const select = (type: CredentialType, selectedAttributeIds: string[]) => {
