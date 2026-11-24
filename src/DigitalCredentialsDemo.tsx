@@ -1,31 +1,27 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Editor } from '@monaco-editor/react'
 import './App.css'
+import pbdfCredentials from './pbdfCredentials.json'
 
-const defaultRequest = {
-  "type": "vp_token",
-  "dcql_query": {
-    "credentials": [
-      {
-        "id": "mobilenumber",
-        "format": "dc+sd-jwt",
-        "meta": {
-          "vct_values": ["pbdf-staging.sidn-pbdf.mobilenumber"]
-        },
-        "claims": [
-          {
-            "id": "mn",
-            "path": ["mobilenumber"]
-          }
-        ]
-      },
-    ],
-  },
-  "nonce": "nonce",
-  "jar_mode": "by_reference",
-  "request_uri_method": "post",
-  "issuer_chain": "-----BEGIN CERTIFICATE-----\nMIICbTCCAhSgAwIBAgIUX8STjkv3TRF5UBstXlp4ILHy2h0wCgYIKoZIzj0EAwQw\nRjELMAkGA1UEBhMCTkwxDTALBgNVBAoMBFlpdmkxKDAmBgNVBAMMH1lpdmkgU3Rh\nZ2luZyBSZXF1ZXN0b3JzIFJvb3QgQ0EwHhcNMjUwODEyMTUwODA1WhcNNDAwODA4\nMTUwODA0WjBMMQswCQYDVQQGEwJOTDENMAsGA1UECgwEWWl2aTEuMCwGA1UEAwwl\nWWl2aSBTdGFnaW5nIEF0dGVzdGF0aW9uIFByb3ZpZGVycyBDQTBZMBMGByqGSM49\nAgEGCCqGSM49AwEHA0IABMDTwj6APykJnBdr0sCO8LpkULpbXFOBWV47hKKsJHsa\nCVMarjLCYU3CV57UdklHSlMrtm7vfoDpYn4BvUv00UqjgdkwgdYwEgYDVR0TAQH/\nBAgwBgEB/wIBADAfBgNVHSMEGDAWgBRjtHvVs5rhDnC0L2AUi+7ncyXe1jBwBgNV\nHR8EaTBnMGWgY6Bhhl9odHRwczovL2NhLnN0YWdpbmcueWl2aS5hcHAvZWpiY2Ev\ncHVibGljd2ViL2NybHMvc2VhcmNoLmNnaT9pSGFzaD1rRkNPdDhOTGhKOGcwV3FN\nQW5sJTJCdm9OMlJ1WTAdBgNVHQ4EFgQUEjcBLRMmQGBJO0h04IL5Jwha1rEwDgYD\nVR0PAQH/BAQDAgGGMAoGCCqGSM49BAMEA0cAMEQCIDEaWIs4uSm8KVQe+fy0EndE\nTaj1ayt6dUgKQY/xZBO3AiAPYGwRlZMzbeCTFQ2ORLJiSowRtXzbmXpNDSyvtn7e\nDw==\n-----END CERTIFICATE-----",
+// The Yivi app registers every credential type of the pbdf scheme with the
+// Android Credential Manager, so these are the credentials this page can ask
+// for. Regenerate the list with scripts/generate-pbdf-credentials.py.
+interface CredentialType {
+  id: string
+  name: string
+  issuer: string
+  deprecated: boolean
+  attributes: { id: string; name: string }[]
 }
+
+const credentialTypes: CredentialType[] = pbdfCredentials
+
+const DEFAULT_CREDENTIAL_ID = 'pbdf.sidn-pbdf.email'
+
+// OpenID4VP 1.0 Appendix A.1. An unsigned request carries its parameters
+// inline: there is no request_uri over the Digital Credentials API, and the
+// response comes back through the browser rather than to a response_uri.
+const PROTOCOL = 'openid4vp-v1-unsigned'
 
 const DemoState = {
   Ready: 'Ready',
@@ -37,154 +33,153 @@ const DemoState = {
 type DemoState = typeof DemoState[keyof typeof DemoState]
 
 interface DisclosureContent {
-  key: string;
-  value: string;
+  key: string
+  value: string
 }
 
-function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
-  const components = sdjwt.split("~")
-  const disclosures = (components.slice(1, components.length - 1).map((value) => {
-    return atob(value)
-  }) as string[])
+function randomNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
 
-  return disclosures.map((value) => {
-    const res = JSON.parse(value) as string[]
-    return { key: res[1], value: res[2] }
-  })
+/** The `data` member of the request: what the wallet reads as the OpenID4VP request. */
+function buildRequestData(credential: CredentialType, attributeIds: string[]) {
+  return {
+    response_type: 'vp_token',
+    response_mode: 'dc_api',
+    nonce: randomNonce(),
+    dcql_query: {
+      credentials: [
+        {
+          id: 'credential',
+          format: 'dc+sd-jwt',
+          meta: { vct_values: [credential.id] },
+          claims: attributeIds.map((id) => ({ path: [id] })),
+        },
+      ],
+    },
+  }
+}
+
+function formatRequest(credential: CredentialType, attributeIds: string[]): string {
+  return JSON.stringify(buildRequestData(credential, attributeIds), null, 2)
+}
+
+function decodeBase64Url(value: string): string {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+  const bytes = Uint8Array.from(atob(padded), (char) => char.charCodeAt(0))
+  return new TextDecoder().decode(bytes)
+}
+
+/** The claims an SD-JWT presentation discloses: `<jwt>~<disclosure>~...~<key binding jwt>`. */
+function parseSdJwtVc(sdjwt: string): DisclosureContent[] {
+  const components = sdjwt.split('~')
+  return components.slice(1, components.length - 1)
+    .filter((disclosure) => disclosure.length > 0)
+    .map((disclosure) => {
+      const [, key, value] = JSON.parse(decodeBase64Url(disclosure)) as [string, string, unknown]
+      return { key, value: typeof value === 'string' ? value : JSON.stringify(value) }
+    })
+}
+
+function defaultAttributeIds(credential: CredentialType): string[] {
+  return credential.attributes.slice(0, 1).map((attribute) => attribute.id)
 }
 
 function DigitalCredentialsDemo() {
+  const initialCredential =
+    credentialTypes.find((credential) => credential.id === DEFAULT_CREDENTIAL_ID) ?? credentialTypes[0]
+
   const [demoState, setDemoState] = useState<DemoState>(DemoState.Ready)
-  const [sessionRequest, setSessionRequest] = useState(JSON.stringify(defaultRequest, null, 2));
-  const [responseData, setResponseData] = useState<any>(null)
-  const [error, setError] = useState<string>("")
-  const [walletResponse, setWalletResponse] = useState<DisclosureContent[][]>([])
+  const [credentialId, setCredentialId] = useState(initialCredential.id)
+  const [attributeIds, setAttributeIds] = useState(defaultAttributeIds(initialCredential))
+  const [requestData, setRequestData] = useState(
+    formatRequest(initialCredential, defaultAttributeIds(initialCredential)),
+  )
+  const [responseData, setResponseData] = useState<unknown>(null)
+  const [error, setError] = useState('')
+  const [walletResponse, setWalletResponse] = useState<DisclosureContent[]>([])
+
+  const credential = credentialTypes.find((type) => type.id === credentialId) ?? initialCredential
+
+  // Grouped by issuer, with the credential types that are no longer issued last.
+  const groups = useMemo(() => {
+    const byIssuer = new Map<string, CredentialType[]>()
+    for (const type of credentialTypes.filter((type) => !type.deprecated)) {
+      byIssuer.set(type.issuer, [...(byIssuer.get(type.issuer) ?? []), type])
+    }
+    const sorted: [string, CredentialType[]][] = [...byIssuer.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+    const deprecated = credentialTypes.filter((type) => type.deprecated)
+    if (deprecated.length > 0) sorted.push(['No longer issued', deprecated])
+    return sorted
+  }, [])
+
+  const select = (type: CredentialType, selectedAttributeIds: string[]) => {
+    setCredentialId(type.id)
+    setAttributeIds(selectedAttributeIds)
+    setRequestData(formatRequest(type, selectedAttributeIds))
+  }
+
+  const selectCredential = (id: string) => {
+    const type = credentialTypes.find((candidate) => candidate.id === id)
+    if (type) select(type, defaultAttributeIds(type))
+  }
+
+  const toggleAttribute = (id: string) => {
+    // Kept in the order of the credential type, not the order of clicking.
+    const selected = credential.attributes
+      .map((attribute) => attribute.id)
+      .filter((attributeId) => (attributeId === id) !== attributeIds.includes(attributeId))
+    select(credential, selected)
+  }
 
   const requestCredential = async () => {
     setDemoState(DemoState.Requesting)
-    setError("")
+    setError('')
 
     try {
-      // Log detailed browser capabilities for debugging
-      console.log('Browser capabilities:', {
-        hasNavigator: typeof navigator !== 'undefined',
-        hasCredentials: typeof navigator.credentials !== 'undefined',
-        credentialsType: typeof navigator.credentials,
-        hasIdentityCredential: typeof window !== 'undefined' && 'IdentityCredential' in window,
-        hasPublicKeyCredential: typeof window !== 'undefined' && 'PublicKeyCredential' in window,
-        userAgent: navigator.userAgent,
-        isAndroid: /Android/i.test(navigator.userAgent),
-        isMobile: /Mobile/i.test(navigator.userAgent),
-        protocol: window.location.protocol,
-        hostname: window.location.hostname,
-      })
-
-      // Check if Credential Management API is available
-      // Try to access it even if the check fails, as some browsers might have it
-      if (typeof navigator.credentials === 'undefined') {
-        console.warn('navigator.credentials is undefined - attempting anyway for testing')
-        // Don't throw error yet, try the API call anyway
-      }
-
-      // Start the OpenID4VP session with the verifier
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/ui/presentations`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: sessionRequest,
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error(`Failed to start session: ${response.statusText}`)
-      }
-
-      const sessionData = await response.json()
-      console.log('Session started:', sessionData)
-
-      // Parse the session request to get the actual DCQL query
-      const requestBody = JSON.parse(sessionRequest)
-      console.log('Request body:', requestBody)
-
-      // Create the Digital Credentials API request
-      // The data object should contain the actual OpenID4VP request parameters
-      // @ts-ignore - Digital Credentials API types not yet in TypeScript
-      const credentialRequestOptions = {
-        digital: {
-          requests: [{
-            protocol: "openid4vp",
-            data: {
-              client_id: sessionData.client_id,
-              request_uri: sessionData.request_uri,
-              request_uri_method: sessionData.request_uri_method || "get",
-              // Include the full request parameters that the backend generated
-              ...sessionData
-            }
-          }]
-        }
-      }
-
-      console.log('Credential request options:', credentialRequestOptions)
-
-      // Final check before making the API call
-      if (!navigator.credentials || typeof navigator.credentials.get !== 'function') {
+      if (!('DigitalCredential' in window) || typeof navigator.credentials?.get !== 'function') {
         throw new Error(
-          'navigator.credentials.get is not available. ' +
-          'Make sure you:\n' +
-          '1. Are using Chrome 128+ on Android\n' +
-          '2. Have enabled chrome://flags/#digital-credentials\n' +
-          '3. Have completely restarted Chrome after enabling the flag\n' +
-          '4. Are accessing via HTTPS or localhost'
+          'This browser does not support the Digital Credentials API. ' +
+          'Use Chrome on Android, served over HTTPS or from localhost.',
         )
       }
 
-      // @ts-ignore - Digital Credentials API types not yet in TypeScript
-      const credential = await navigator.credentials.get(credentialRequestOptions)
+      const data = JSON.parse(requestData)
+      const options = {
+        digital: {
+          requests: [{ protocol: PROTOCOL, data }],
+        },
+      }
+      console.log('Credential request options:', options)
 
-      console.log('Received credential:', credential)
-
-      if (!credential) {
+      // The Digital Credentials API is not in TypeScript's DOM types yet.
+      const result = await navigator.credentials.get(options as CredentialRequestOptions)
+      console.log('Received credential:', result)
+      if (!result) {
         throw new Error('No credential returned from wallet')
       }
 
-      // The credential.data contains the vp_token response as a JSON string
-      // @ts-ignore - Digital Credentials API types not yet in TypeScript
-      const responseJson = credential.data
-      console.log('Raw credential data:', responseJson)
-
-      const credentialData = typeof responseJson === 'string'
-        ? JSON.parse(responseJson)
-        : responseJson
-      setResponseData(credentialData)
-
-      // Parse and display the response
-      if (credentialData.vp_token) {
-        const entries = new Map<string, string[]>(Object.entries(credentialData.vp_token))
-        const parsed = Array.from(entries, ([_, sdjwts]) => {
-          return sdjwts.map(parseSdJwtVc).flat()
-        })
-        setWalletResponse(parsed)
+      // The wallet's Authorization Response: {"vp_token": {"<query id>": ["<presentation>"]}}.
+      const raw = (result as unknown as { data: unknown }).data
+      const response = (typeof raw === 'string' ? JSON.parse(raw) : raw) as {
+        vp_token?: Record<string, string[]>
       }
+      setResponseData(response)
 
+      if (!response.vp_token) {
+        throw new Error('The wallet response carries no vp_token')
+      }
+      setWalletResponse(Object.values(response.vp_token).flat().flatMap(parseSdJwtVc))
       setDemoState(DemoState.Success)
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error requesting credential:', err)
-
-      let errorMessage = err.message || 'Unknown error occurred'
-
-      // Add helpful context for common errors
-      if (errorMessage.includes('digital')) {
-        errorMessage += '\n\nNote: The Digital Credentials API requires:\n' +
-          '- Chrome 128+ on Android\n' +
-          '- HTTPS or localhost\n' +
-          '- The chrome://flags/#digital-credentials flag enabled\n' +
-          '- A compatible wallet app installed (Yivi app with Digital Credentials support)'
-      }
-
-      setError(errorMessage)
+      setError(err instanceof Error ? err.message : 'Unknown error occurred')
       setDemoState(DemoState.Error)
     }
   }
@@ -192,15 +187,18 @@ function DigitalCredentialsDemo() {
   const reset = () => {
     setDemoState(DemoState.Ready)
     setResponseData(null)
-    setError("")
+    setError('')
     setWalletResponse([])
+    // A nonce is for one request.
+    setRequestData(formatRequest(credential, attributeIds))
   }
 
   return (
-    <div className="w-screen h-screen flex items-center flex-col align-center">
-      <h2 className="text-3xl">Digital Credentials API Demo</h2>
+    <div className="flex-1 w-full flex items-center flex-col px-4 pb-8">
+      <h2 className="text-3xl mt-4">Digital Credentials API Demo</h2>
       <p className="text-sm text-gray-600 max-w-2xl text-center mt-2">
-        This demo uses the Android Digital Credentials API to request credentials from the Yivi wallet.
+        Asks the Yivi wallet for a credential through the Digital Credentials API, with an
+        unsigned OpenID4VP request. Yivi shows this site by its origin, as an unknown party.
       </p>
       <div className="text-xs text-gray-500 max-w-2xl text-center mt-2 bg-yellow-50 border border-yellow-200 rounded p-2">
         <strong>Requirements:</strong><br />
@@ -211,30 +209,69 @@ function DigitalCredentialsDemo() {
       </div>
 
       {demoState === DemoState.Ready && (
-        <div className="h-full w-full flex items-center flex-col">
+        <div className="w-full max-w-4xl flex flex-col mt-6">
+          <label className="text-sm text-gray-600 mb-1" htmlFor="credential-type">
+            Credential
+          </label>
+          <select
+            id="credential-type"
+            className="border border-gray-300 rounded p-2 bg-white text-gray-900"
+            value={credential.id}
+            onChange={(event) => selectCredential(event.target.value)}
+          >
+            {groups.map(([group, types]) => (
+              <optgroup key={group} label={group}>
+                {types.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.name} ({type.id})
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+
+          <fieldset className="mt-4">
+            <legend className="text-sm text-gray-600 mb-1">Attributes to ask for</legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+              {credential.attributes.map((attribute) => (
+                <label key={attribute.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={attributeIds.includes(attribute.id)}
+                    onChange={() => toggleAttribute(attribute.id)}
+                  />
+                  <span>{attribute.name}</span>
+                  <code className="text-xs text-gray-500">{attribute.id}</code>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <button
-            className="m-5"
+            className="my-5 self-center"
             onClick={requestCredential}
+            disabled={attributeIds.length === 0}
           >
             Request Credential via Digital Credentials API
           </button>
-          <div className="w-full max-w-4xl">
-            <p className="text-sm text-gray-600 mb-2">OpenID4VP Request:</p>
-            <Editor
-              height="400px"
-              width="100%"
-              defaultLanguage="json"
-              value={sessionRequest}
-              theme="vs-dark"
-              onChange={(value) => setSessionRequest(value ?? '')}
-              options={{
-                automaticLayout: true,
-                minimap: { enabled: false },
-                formatOnPaste: true,
-                formatOnType: true,
-              }}
-            />
-          </div>
+
+          <p className="text-sm text-gray-600 mb-2">
+            OpenID4VP request, sent as <code>{PROTOCOL}</code>:
+          </p>
+          <Editor
+            height="400px"
+            width="100%"
+            defaultLanguage="json"
+            value={requestData}
+            theme="vs-dark"
+            onChange={(value) => setRequestData(value ?? '')}
+            options={{
+              automaticLayout: true,
+              minimap: { enabled: false },
+              formatOnPaste: true,
+              formatOnType: true,
+            }}
+          />
         </div>
       )}
 
@@ -243,7 +280,7 @@ function DigitalCredentialsDemo() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
           <p className="mt-4 text-gray-600">Waiting for wallet response...</p>
           <p className="mt-2 text-sm text-gray-500">
-            The Yivi wallet should open automatically via Android Credential Manager
+            Android shows its credential picker, and opens Yivi once you choose it
           </p>
         </div>
       )}
@@ -255,6 +292,9 @@ function DigitalCredentialsDemo() {
           <div className="w-full mb-6">
             <h4 className="text-lg font-semibold mb-2">Disclosed Attributes:</h4>
             <WalletResponseView disclosures={walletResponse} />
+            <p className="text-xs text-gray-500 text-center mt-2">
+              Shown as received: this page does not verify the presentation.
+            </p>
           </div>
 
           <div className="w-full">
@@ -273,10 +313,7 @@ function DigitalCredentialsDemo() {
             />
           </div>
 
-          <button
-            className="m-5"
-            onClick={reset}
-          >
+          <button className="m-5" onClick={reset}>
             Start New Request
           </button>
         </div>
@@ -289,10 +326,7 @@ function DigitalCredentialsDemo() {
             <strong className="font-bold">Error: </strong>
             <span className="block sm:inline">{error}</span>
           </div>
-          <button
-            className="mt-5"
-            onClick={reset}
-          >
+          <button className="mt-5" onClick={reset}>
             Try Again
           </button>
         </div>
@@ -302,15 +336,14 @@ function DigitalCredentialsDemo() {
 }
 
 interface WalletResponseViewProps {
-  disclosures: DisclosureContent[][]
+  disclosures: DisclosureContent[]
 }
 
-const WalletResponseView = (disclosures: WalletResponseViewProps) => {
-  const discs = disclosures.disclosures.flat()
+const WalletResponseView = ({ disclosures }: WalletResponseViewProps) => {
   return (
     <div className="max-w-md mx-auto border border-gray-200 rounded-md shadow-sm">
       <dl className="divide-y divide-gray-200">
-        {discs.map(({ key, value }) => (
+        {disclosures.map(({ key, value }) => (
           <div key={key} className="flex justify-between px-4 py-3 bg-white">
             <dt className="text-gray-600 font-medium">{key}</dt>
             <dd className="text-gray-900">{value}</dd>
@@ -318,7 +351,7 @@ const WalletResponseView = (disclosures: WalletResponseViewProps) => {
         ))}
       </dl>
     </div>
-  );
+  )
 }
 
 export default DigitalCredentialsDemo
