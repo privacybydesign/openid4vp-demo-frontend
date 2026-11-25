@@ -19,6 +19,7 @@ import WalletResponseView from "./WalletResponseView"
 import IssuerSessionPoller from "./IssuerSessionPoller"
 import IssuanceCompleteView from "./IssuanceCompleteView"
 import ErrorView from "./ErrorView"
+import DigitalCredentialsDemo from "./DigitalCredentialsDemo"
 import { applyLinkForm } from "./walletLink"
 import type { LinkForm } from "./walletLink"
 
@@ -48,6 +49,7 @@ function defaultRequestFor(tabId: TabId, mode: IssuerMode | null): string {
   if (tab.kind === "issuer") {
     return compactJson(resolveMode(tab, mode ?? tab.defaultMode).defaultRequest)
   }
+  if (tab.kind === "dc-api") return ""
   return compactJson(tab.defaultRequest)
 }
 
@@ -295,7 +297,7 @@ function App() {
       if (tab.kind === "verifier") {
         const session = await tab.startSession(currentRequest, linkForm, clientIdPrefix)
         await startVerifierSession(session)
-      } else {
+      } else if (tab.kind === "issuer") {
         const session = await resolveMode(tab, activeMode).startSession(currentRequest)
         await startIssuerSession(session)
       }
@@ -337,7 +339,8 @@ function App() {
   const subModes = tab.kind === "issuer" && issuerModes(tab).length > 1
     ? issuerModes(tab).map((id) => ({ id, label: tab.modes[id]!.label }))
     : undefined
-  const presets = tab.kind === "issuer" ? resolveMode(tab, activeMode).presets : tab.presets
+  const presets =
+    tab.kind === "issuer" ? resolveMode(tab, activeMode).presets : tab.kind === "verifier" ? tab.presets : undefined
   const clientIdPrefixes = tab.kind === "verifier" ? tab.clientIdPrefixes : undefined
 
   return (
@@ -355,7 +358,9 @@ function App() {
           onSwitch={switchTab}
         />
 
-        {frontendState === FrontendState.Pending && (
+        {tab.kind === "dc-api" && <DigitalCredentialsDemo />}
+
+        {tab.kind !== "dc-api" && frontendState === FrontendState.Pending && (
           <RequestEditor
             activeTab={activeTab}
             defaultValue={currentRequest}

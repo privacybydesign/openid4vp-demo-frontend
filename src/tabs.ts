@@ -6,6 +6,7 @@ export type TabId =
   | "irma-verifier"
   | "eudi-verifier"
   | "veramo-verifier"
+  | "dc-api-verifier"
   | "irma-issuer"
   | "veramo-issuer"
   | "eudi-issuer"
@@ -99,7 +100,14 @@ export interface IssuerTabConfig extends TabBase {
   defaultMode: IssuerMode
 }
 
-export type TabConfig = VerifierTabConfig | IssuerTabConfig
+// The Digital Credentials API tab asks the wallet through the browser, so it has
+// no request editor, wallet link or session to poll. It renders its own page
+// instead of going through RequestEditor and the session states.
+export interface DcApiTabConfig extends TabBase {
+  kind: "dc-api"
+}
+
+export type TabConfig = VerifierTabConfig | IssuerTabConfig | DcApiTabConfig
 
 // Modes an issuer tab declares, in display order.
 export function issuerModes(tab: IssuerTabConfig): IssuerMode[] {
@@ -128,9 +136,15 @@ export interface TabGroup {
   tabs: TabConfig[]
 }
 
+const dcApiVerifier: DcApiTabConfig = {
+  kind: "dc-api",
+  tab: "dc-api-verifier",
+  label: "Digital Credentials API",
+}
+
 export const tabGroups: TabGroup[] = [
   { id: "issuer", label: "Issuer", tabs: [irmaIssuer, eudiIssuer, veramoIssuer] },
-  { id: "verifier", label: "Verifier", tabs: [irmaVerifier, eudiVerifier, veramoVerifier] },
+  { id: "verifier", label: "Verifier", tabs: [irmaVerifier, eudiVerifier, veramoVerifier, dcApiVerifier] },
 ]
 
 export const tabs: TabConfig[] = tabGroups.flatMap((g) => g.tabs)

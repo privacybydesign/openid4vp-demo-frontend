@@ -76,6 +76,27 @@ override any of the following to point at a different environment.
 | `VERAMO_AUTHCODE_ISSUER_NAME`   | Issuer name for the `authcode` key      |
 | `VERAMO_ISSUER_ADMIN_TOKEN`     | Veramo issuer admin token (secret)      |
 
+## Digital Credentials API tab
+
+The Verifier > Digital Credentials API tab asks the Yivi wallet for a credential
+through the [Digital Credentials API](https://wicg.github.io/digital-credentials/),
+with an unsigned OpenID4VP request (`openid4vp-v1-unsigned`, response mode
+`dc_api`) sent straight from the page. The verifier backend is not involved. Yivi
+shows the site by its origin, as an unknown party, and the page shows the response
+without verifying it.
+
+You pick the credential and its attributes from the credential types of the `pbdf`
+scheme that are still issued, because the Yivi app registers those with the
+Android Credential Manager. The list is in `src/pbdfCredentials.json`; regenerate
+it from a checkout of the scheme with:
+
+```sh
+scripts/generate-pbdf-credentials.py path/to/irma_configuration/pbdf
+```
+
+It needs Chrome 128+ on Android with `chrome://flags/#digital-credentials`
+enabled, the Yivi app with Digital Credentials support, and HTTPS (or localhost).
+
 ## Build / lint
 
 ```sh
