@@ -36,7 +36,8 @@ export interface VeramoSource {
   vct: string
   // Which formats the staging issuer has a configuration for today.
   available: Record<VeramoFormat, boolean>
-  // Whether the configuration has a status list, so a credential can be revoked.
+  // Whether the SD-JWT VC configuration has a status list, so a credential can be
+  // revoked. The VCDM configurations have none.
   revocable: boolean
   data: (v: Values) => object
 }
@@ -106,8 +107,8 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "Email",
       vct: "email",
-      available: { sd: true, vcdm: false },
-      revocable: false,
+      available: { sd: true, vcdm: true },
+      revocable: true,
       data: (v) => ({ email: v.email, domain: v.email.split("@")[1] ?? v.domain }),
     },
   },
@@ -120,7 +121,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "Phone",
       vct: "phone",
-      available: { sd: true, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({ phone_number: v.mobile }),
     },
@@ -143,7 +144,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "Passport",
       vct: "passport",
-      available: { sd: false, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({
         given_name: v.givenName,
@@ -188,7 +189,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "IdCard",
       vct: "idcard",
-      available: { sd: false, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({
         given_name: v.givenName,
@@ -247,7 +248,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "DrivingLicence",
       vct: "drivinglicence",
-      available: { sd: false, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({
         given_name: v.givenName,
@@ -331,8 +332,8 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "PersonalData",
       vct: "personaldata",
-      available: { sd: false, vcdm: false },
-      revocable: false,
+      available: { sd: true, vcdm: true },
+      revocable: true,
       data: (v) => ({
         given_name: v.givenName,
         family_name: v.familyName,
@@ -369,7 +370,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "Address",
       vct: "address",
-      available: { sd: false, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({
         street_address: `${v.street} ${v.houseNumber}`,
@@ -411,7 +412,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "Pid",
       vct: "pid",
-      available: { sd: false, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({
         given_name: v.givenName,
@@ -461,7 +462,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "BankAccount",
       vct: "bankaccount",
-      available: { sd: false, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({ holder_name: v.holder, iban: v.iban, bic: v.bic }),
     },
@@ -488,7 +489,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "Diploma",
       vct: "diploma",
-      available: { sd: false, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({ education: v.education, achieved: v.achieved, institute: v.institute }),
     },
@@ -510,8 +511,8 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "ExamRegistration",
       vct: "examregistration",
-      available: { sd: false, vcdm: false },
-      revocable: false,
+      available: { sd: true, vcdm: true },
+      revocable: true,
       data: (v) => ({ exam: v.exam, date: v.date, room: v.room }),
     },
   },
@@ -523,7 +524,7 @@ export const CARDS: CardDef[] = [
     veramo: {
       name: "Organization",
       vct: "organization",
-      available: { sd: true, vcdm: false },
+      available: { sd: true, vcdm: true },
       revocable: false,
       data: (v) => ({
         name: v.name,

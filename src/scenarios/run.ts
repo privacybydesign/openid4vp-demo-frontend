@@ -40,7 +40,8 @@ export function canIssue(source: Source, instance: CardInstance, format: VeramoF
   if (source === "veramo") {
     if (!def.veramo) return "No Veramo type for this card."
     if (!def.veramo.available[format]) return `${veramoConfigurationId(def, format)} still has to be added to the Veramo issuer.`
-    if (instance.state === "revoked" && !def.veramo.revocable) return `${veramoConfigurationId(def, format)} has no status list, so it can't be revoked yet.`
+    if (instance.state === "revoked" && !(def.veramo.revocable && format === "sd"))
+      return `${veramoConfigurationId(def, format)} has no status list, so it can't be revoked.`
     return null
   }
   if (!def.eudi?.length) return "The EUDI issuer has nothing for this card."
@@ -108,7 +109,7 @@ async function issueVeramo(instance: CardInstance, format: VeramoFormat): Promis
       if (r.status !== 200) return false
       const { status } = (await r.json()) as { status?: string }
       if (status !== "CREDENTIAL_ISSUED") return false
-      if (def.veramo!.revocable) {
+      if (def.veramo!.revocable && format === "sd") {
         issuance.revoke = async () => {
           // The issuance record carries the revocation handle; the newest one of
           // this type is the one just issued.
