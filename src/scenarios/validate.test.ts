@@ -4,8 +4,10 @@ import { SCENARIOS } from "./index"
 import type { FormatChoice } from "./types"
 
 describe("scenarios", () => {
+  // The prototype has 44; its empty-wallet stress test can't run on either
+  // protocol, so it's left out.
   it("cover every case of the wallet prototype", () => {
-    expect(SCENARIOS).toHaveLength(44)
+    expect(SCENARIOS).toHaveLength(43)
   })
 
   it("hang together", () => {
@@ -16,6 +18,15 @@ describe("scenarios", () => {
 describe("the checks themselves", () => {
   const hotel = SCENARIOS.find((s) => s.id === "hotel")!
   const stress = SCENARIOS.find((s) => s.id === "stress")!
+
+  it("catch two non-singleton credentials in one inner con", () => {
+    const broken = {
+      ...hotel,
+      irma: { ...hotel.irma!, request: { disclose: [[["irma-demo.sidn-pbdf.email.email", "irma-demo.sidn-pbdf.mobilenumber.mobilenumber"]]] } },
+      wallet: { ...hotel.wallet, before: [{ card: "email" as const }, { card: "phone" as const }] },
+    }
+    expect(validateScenarios([broken]).some((p) => p.includes("several non-singleton credentials"))).toBe(true)
+  })
 
   it("catch an IRMA attribute the card never issues", () => {
     const broken = { ...hotel, irma: { ...hotel.irma!, request: { disclose: [[["irma-demo.sidn-pbdf.email.emial"]]] } } }

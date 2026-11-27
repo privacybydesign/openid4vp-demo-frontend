@@ -1,7 +1,7 @@
 # openid4vp-demo-frontend
 
 A small Vite + React tool for exercising the Yivi verifier and Veramo
-verifier/issuer flows. It is organised around **scenarios**: the 44 cases of the
+verifier/issuer flows. It is organised around **scenarios**: 43 of the 44 cases of the
 wallet prototype, each with the wallet setup it needs and a native request per
 protocol. The old per-implementation tabs live on as the **Playground**.
 

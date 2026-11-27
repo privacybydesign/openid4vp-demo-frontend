@@ -46,6 +46,17 @@ function checkIrma(s: Scenario, problems: string[]) {
   const request = irma.request as { disclose?: unknown[][][] }
   for (const discon of request.disclose ?? []) {
     for (const con of discon) {
+      const nonSingletons = new Set(
+        con
+          .map((attr) => (typeof attr === "string" ? attr : (attr as { type: string }).type).split(".").slice(0, 3).join("."))
+          .filter((credential) => {
+            const cardId = byCredential.get(credential)
+            return cardId && !CARD_BY_ID[cardId].irma!.singleton
+          })
+      )
+      if (nonSingletons.size > 1) {
+        problems.push(`${s.id}: IRMA inner con holds several non-singleton credentials (${[...nonSingletons].join(", ")}), which IRMA doesn't allow`)
+      }
       for (const attr of con) {
         const id = typeof attr === "string" ? attr : (attr as { type: string }).type
         const parts = id.split(".")

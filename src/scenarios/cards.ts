@@ -15,6 +15,9 @@ export const VERAMO_ISSUER_BASE =
 
 export interface IrmaSource {
   credential: string
+  // ShouldBeSingleton in the irma-demo scheme. An inner con of a condiscon may hold
+  // at most one credential type that isn't.
+  singleton?: true
   attributes: (v: Values) => Record<string, string>
   // irmago refuses to issue a revocation-enabled credential without a key.
   revocable?: boolean
@@ -304,6 +307,7 @@ export const CARDS: CardDef[] = [
     note: "In pbdf-staging, idin stands in (it has no BSN).",
     irma: {
       credential: "irma-demo.gemeente.personalData",
+      singleton: true,
       attributes: (v) => ({
         initials: v.initials,
         firstnames: v.givenName,
@@ -352,6 +356,7 @@ export const CARDS: CardDef[] = [
     note: "idin stands in for either personal data or address in pbdf-staging, never both in one scenario.",
     irma: {
       credential: "irma-demo.gemeente.address",
+      singleton: true,
       attributes: (v) => ({
         street: v.street,
         houseNumber: v.houseNumber,
@@ -389,6 +394,7 @@ export const CARDS: CardDef[] = [
     note: "The real EUDI PID only for scenarios about it; elsewhere the Veramo PID keeps a scenario on one verifier.",
     irma: {
       credential: "irma-demo.idin.idin",
+      singleton: true,
       attributes: (v) => ({
         initials: v.initials,
         familyname: v.familyName,
@@ -543,7 +549,8 @@ export const CARDS: CardDef[] = [
     name: "BSN (revocable)",
     values: { bsn: "123456782" },
     note: "IRMA only: MijnOverheid.root is the one revocable irma-demo type the staging server can issue, so it stands in for personal data in the revoked-card scenario.",
-    irma: { credential: "irma-demo.MijnOverheid.root", attributes: (v) => ({ BSN: v.bsn }), revocable: true },
+    irma: { credential: "irma-demo.MijnOverheid.root",
+      singleton: true, attributes: (v) => ({ BSN: v.bsn }), revocable: true },
   },
 ]
 

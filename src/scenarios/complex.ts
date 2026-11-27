@@ -1,5 +1,5 @@
 import type { FormatChoice, Scenario, WalletState } from "./types"
-import { card, during, wallet, ia, iv, irmaDisclosure, pbdfQ, veramoQ, dcql, set } from "./build"
+import { card, during, wallet, ia, irmaDisclosure, pbdfQ, veramoQ, dcql, set } from "./build"
 import { MAIL1, MAIL2, MAIL3, PASS1, PASS2, PASS3 } from "./basics"
 
 const PHONE2 = { mobile: "+31687654321" }
@@ -11,7 +11,7 @@ const DIPLOMA3 = { education: "MBO Verzorgende IG", achieved: "2010" }
 const DIPLOMA4 = { education: "Post-hbo Wijkverpleging", achieved: "2022" }
 
 const MULTI_NON_SINGLETON =
-  "The staging IRMA server refuses several non-singleton credentials in one inner con (irmago #804), so it rejects this request until that lands."
+  "It needs two non-singleton credentials in one inner con of the condiscon, which IRMA doesn't allow."
 
 const IRMA_ADDRESS = ia("address", "street", "city")
 
@@ -59,20 +59,6 @@ const STRESS_FULL: WalletState = wallet(
   ["idcard"]
 )
 
-function stressIrma(optionalSecond: boolean): object {
-  return irmaDisclosure([
-    [
-      [...ia("email", "email"), ...ia("phone", "mobilenumber")],
-      [...ia("iban", "fullname", "iban"), ...ia("passport", "number")],
-    ],
-    [
-      ...(optionalSecond ? [[]] : []),
-      [...ia("pid", "address", "city"), iv("pid", "country", "NL"), ...ia("driving", "lastName", "documentNumber")],
-      [...ia("address", "street", "city"), ...ia("idcard", "number")],
-    ],
-  ])
-}
-
 function stressDcql(f: FormatChoice, optionalSecond: boolean): object {
   return dcql(
     [
@@ -110,11 +96,6 @@ export const complex: Scenario[] = [
       [card("email", MAIL1), card("email", MAIL2), card("phone"), card("phone", PHONE2), card("phone", PHONE3)],
       [during("Another email address or mobile number, if you want to choose it", card("email", MAIL3), card("phone", PHONE4))]
     ),
-    irma: {
-      status: "check",
-      note: MULTI_NON_SINGLETON,
-      request: irmaDisclosure([[[...ia("email", "email"), ...ia("phone", "mobilenumber")]]]),
-    },
     dcql: {
       source: "pbdf",
       during: "inFlow",
@@ -122,7 +103,7 @@ export const complex: Scenario[] = [
       query: () =>
         dcql([pbdfQ("email", "email", ["email"]), pbdfQ("phone", "phone", ["mobilenumber"])], [set([["email", "phone"]])]),
     },
-    unavailable: {},
+    unavailable: { irma: MULTI_NON_SINGLETON },
     expected: "One email address and one mobile number.",
     lookFor: ["Per card, you choose which one you share", "Adding another one is offered next to the choice"],
   },
@@ -236,11 +217,6 @@ export const complex: Scenario[] = [
       [during("A mobile number, or a passport", card("phone"), card("passport", PASS1))],
       ["phone", "passport"]
     ),
-    irma: {
-      status: "check",
-      note: MULTI_NON_SINGLETON,
-      request: irmaDisclosure([[[...ia("email", "email"), ...ia("phone", "mobilenumber")], ia("passport", "kind", "number")]]),
-    },
     dcql: {
       source: "pbdf",
       during: "inFlow",
@@ -251,7 +227,7 @@ export const complex: Scenario[] = [
           [set([["email", "phone"], ["passport"]])]
         ),
     },
-    unavailable: {},
+    unavailable: { irma: MULTI_NON_SINGLETON },
     expected: "Email + mobile number, or the passport.",
     lookFor: ["The option you're closest to is suggested first", "Only the missing mobile number is a step to do"],
   },
@@ -328,9 +304,8 @@ export const complex: Scenario[] = [
       "Two required sets of two options of two cards, with a full wallet: three email addresses, two of most cards, and a Belgian EU identity that fails the value check.",
     prototypeFrame: "S9_Stresstest",
     wallet: STRESS_FULL,
-    irma: { status: "check", note: MULTI_NON_SINGLETON, request: stressIrma(false) },
     dcql: { source: "veramo", during: "upFront", status: "flagged", query: (f) => stressDcql(f, false) },
-    unavailable: {},
+    unavailable: { irma: MULTI_NON_SINGLETON },
     expected: "Two credentials from each set; only a Dutch EU identity.",
     lookFor: STRESS_LOOK,
   },
@@ -341,37 +316,9 @@ export const complex: Scenario[] = [
     description: "The stress test, with the second set (EU identity + licence, or address + ID card) not required.",
     prototypeFrame: "S10_Stresstest_optioneel",
     wallet: STRESS_FULL,
-    irma: { status: "check", note: MULTI_NON_SINGLETON, request: stressIrma(true) },
     dcql: { source: "veramo", during: "upFront", status: "flagged", query: (f) => stressDcql(f, true) },
-    unavailable: {},
+    unavailable: { irma: MULTI_NON_SINGLETON },
     expected: "Two credentials from the first set; the second only if switched on.",
     lookFor: ["The second set is optional and off by default", ...STRESS_LOOK.slice(0, 2)],
-  },
-  {
-    id: "stressleeg",
-    group: "complex",
-    title: "Stress test, empty wallet",
-    description: "The stress test with nothing in the app: every card is added during the session.",
-    prototypeFrame: "S9_Stresstest",
-    wallet: wallet(
-      [],
-      [
-        during("Set 1 · option A", card("email", MAIL1), card("phone")),
-        during("Set 1 · option B", card("iban"), card("passport", PASS1)),
-        during("Set 2 · option A", card("pid"), card("driving")),
-        during("Set 2 · option B", card("address"), card("idcard")),
-      ],
-      ["email", "phone", "iban", "passport", "pid", "driving", "address", "idcard"]
-    ),
-    irma: { status: "check", note: MULTI_NON_SINGLETON, request: stressIrma(false) },
-    unavailable: {
-      dcql: "It is about adding everything mid-session, which OpenID4VCI can't do; the full-wallet stress test has a DCQL variant.",
-    },
-    expected: "Two credentials from each set, after adding them.",
-    lookFor: [
-      "Empty wallet: two things to do, each in two ways",
-      "Choosing a possibility shows both cards of that option",
-      "After the first set is complete, the overview says so and moves to the second",
-    ],
   },
 ]
