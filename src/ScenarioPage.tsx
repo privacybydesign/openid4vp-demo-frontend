@@ -9,6 +9,7 @@ import type { Disclosure, DisclosureResult, SessionOptions } from "./scenarios/r
 import IssueRow from "./IssueRow"
 import JsonView from "./JsonView"
 import RequestDialog from "./RequestDialog"
+import Modal from "./Modal"
 import QRCodeComponent from "./QrCodeComponent"
 import { DisclosureTable } from "./WalletResponseView"
 import { applyLinkForm, stampSecondDeviceForQr } from "./walletLink"
@@ -313,6 +314,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const generated = useMemo(() => requestBody(scenario, variant, formats, options), [scenario, variant, formats, options])
   const [edited, setEdited] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>("ready")
   const [disclosure, setDisclosure] = useState<Disclosure | null>(null)
   const [result, setResult] = useState<DisclosureResult | null>(null)
@@ -346,6 +348,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
       const d = await startDisclosure(scenario, variant, body, options)
       setDisclosure(d)
       setPhase("running")
+      setQrOpen(true)
       stop()
       timer.current = setInterval(async () => {
         try {
@@ -467,9 +470,23 @@ export default function ScenarioPage(props: ScenarioPageProps) {
               {phase === "ready" ? "Start session" : "Start again"}
             </button>
           ) : (
-            <div className="flex flex-col items-center gap-3 p-4 rounded-lg bg-[#F5FAFC] border border-[#CFE4EF]">
+            <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-lg bg-[#FBEFD8] border border-[#EBD3A6]">
+              <span className="text-[14px] font-semibold text-[#484747]">Session running</span>
+              <div className="flex gap-1">
+                <SmallButton onClick={() => setQrOpen(true)}>Show QR</SmallButton>
+                <SmallButton variant="ghost" onClick={cancel}>
+                  Cancel
+                </SmallButton>
+              </div>
+            </div>
+          )}
+          <Modal open={running && qrOpen} onClose={() => setQrOpen(false)} labelledBy="session-dialog-title" className="w-[min(30rem,94vw)] bg-white">
+            <div className="flex flex-col items-center gap-4 p-6">
+              <h2 id="session-dialog-title" className="text-lg font-bold text-[#484747] m-0 text-center">
+                {scenario.title}
+              </h2>
               {options.device === "qr" ? (
-                <QRCodeComponent text={stampSecondDeviceForQr(link)} size={220} />
+                <QRCodeComponent text={stampSecondDeviceForQr(link)} size={320} />
               ) : (
                 <Hint>Started on this phone: open the wallet with the button.</Hint>
               )}
@@ -498,12 +515,16 @@ export default function ScenarioPage(props: ScenarioPageProps) {
                 <a href={link} className="btn-primary no-underline">
                   Open Yivi
                 </a>
+                <button type="button" className="btn-secondary" onClick={() => setQrOpen(false)}>
+                  Hide
+                </button>
                 <button type="button" className="btn-secondary" onClick={cancel}>
                   Cancel
                 </button>
               </div>
+              <Hint>Hide keeps the session running, for example to issue a card the wallet asks for.</Hint>
             </div>
-          )}
+          </Modal>
         </Panel>
 
         <Panel title="Result" id="res-h" aside={<Tag tone={statusTone}>{statusLabel}</Tag>}>
