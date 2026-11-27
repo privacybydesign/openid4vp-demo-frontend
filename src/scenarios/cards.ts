@@ -574,3 +574,8 @@ export function summarise(card: CardId, overrides?: Values): string {
   const v = cardValues(card, overrides)
   return (SUMMARY_KEYS[card] ?? Object.keys(v)).map((k) => v[k]).filter(Boolean).join(" · ")
 }
+
+// A card name mid-sentence: "No passport", but "No ID card", "an EU identity".
+export function inSentence(name: string): string {
+  return /^[A-Z]{2}/.test(name) ? name : name.charAt(0).toLowerCase() + name.slice(1)
+}

@@ -21,7 +21,7 @@ function displayNameFor(credentialId: string): string {
   return credentialDisplayNames[credentialId] ?? credentialId
 }
 
-const preAuthGrant = {
+export const preAuthGrant = {
   "urn:ietf:params:oauth:grant-type:pre-authorized_code": {
     "pre-authorized_code": "generate",
   },
@@ -495,7 +495,7 @@ function txCodeFromOffer(offer: { grants?: Record<string, { tx_code?: { value?: 
   return String(value)
 }
 
-async function startEudiIssuerSession(request: string): Promise<IssuerSessionResult> {
+export async function startEudiIssuerSession(request: string): Promise<IssuerSessionResult> {
   const response = await fetch("/api/eudi-issuer/offer", {
     method: "POST",
     headers: {

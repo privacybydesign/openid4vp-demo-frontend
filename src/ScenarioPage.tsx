@@ -1,0 +1,529 @@
+import { useEffect, useMemo, useRef, useState } from "react"
+import type { ReactNode } from "react"
+import type { CardInstance, FormatChoice, Scenario, VeramoFormat } from "./scenarios/types"
+import type { Variant } from "./scenarios/index"
+import { instanceSource, veramoCards, walletFor } from "./scenarios/index"
+import { CARD_BY_ID, inSentence, summarise, veramoConfigurationId } from "./scenarios/cards"
+import { requestBody, startDisclosure } from "./scenarios/run"
+import type { Disclosure, DisclosureResult, SessionOptions } from "./scenarios/run"
+import IssueRow from "./IssueRow"
+import JsonView from "./JsonView"
+import JsonEditor from "./JsonEditor"
+import QRCodeComponent from "./QrCodeComponent"
+import { DisclosureTable } from "./WalletResponseView"
+import { applyLinkForm, stampSecondDeviceForQr } from "./walletLink"
+import type { LinkForm } from "./walletLink"
+import { hostForLinkForm } from "./linkHost"
+import { Hint, Panel, Segmented, SmallButton, SubHeading, Tag } from "./ui"
+import { STATUS_LABEL, STATUS_TONE } from "./status"
+
+const PROTOTYPE_URL = "https://claude.ai/artifact/VaATGc5fi2T1B38mBoUr2j"
+
+interface ScenarioPageProps {
+  scenario: Scenario
+  variant: Variant
+  onVariant: (v: Variant) => void
+  formats: FormatChoice
+  onFormats: (f: FormatChoice) => void
+  options: SessionOptions
+  onOptions: (o: SessionOptions) => void
+  linkForm: LinkForm
+  onLinkForm: (l: LinkForm) => void
+  onOpenInPlayground: (variant: Variant, body: string) => void
+}
+
+function instanceTitle(instance: CardInstance): string {
+  return CARD_BY_ID[instance.card].name
+}
+
+function typeLabel(instance: CardInstance, source: string, format: VeramoFormat): string {
+  const def = CARD_BY_ID[instance.card]
+  if (source === "irma") return def.irma?.credential ?? "—"
+  if (source === "pbdf") return def.pbdf?.credential ?? "—"
+  if (source === "veramo") return def.veramo ? `Veramo · ${veramoConfigurationId(def, format)}` : "—"
+  return def.eudi ? `EUDI · ${def.eudi[0].label} (${def.eudi[0].format})` : "—"
+}
+
+// --- setup ----------------------------------------------------------------------
+
+function SetupColumn({
+  scenario,
+  variant,
+  formats,
+  linkForm,
+}: {
+  scenario: Scenario
+  variant: Variant
+  formats: FormatChoice
+  linkForm: LinkForm
+}) {
+  const w = walletFor(scenario, variant)
+  const sourceOf = (i: CardInstance) => (variant === "irma" ? "irma" : instanceSource(scenario.dcql!, i))
+  const [done, setDone] = useState<Record<string, boolean>>({})
+  const report = (key: string) => (d: boolean) => setDone((prev) => (prev[key] === d ? prev : { ...prev, [key]: d }))
+  const beforeKeys = w.before.map((_, i) => `b${i}`)
+  const ready = beforeKeys.filter((k) => done[k]).length
+  // One IRMA session can issue every plain "Before" card at once; revoked or
+  // expiring ones keep their own rows, since they need a follow-up step each.
+  const bulk = variant === "irma" ? w.before.filter((i) => !i.state) : []
+  const flagged = variant === "dcql" && scenario.dcql!.during === "upFront" && (scenario.dcql!.wallet ?? scenario.wallet).during.length > 0
+
+  return (
+    <Panel
+      title="Wallet setup"
+      id="setup-h"
+      aside={<Tag tone={ready === w.before.length ? "green" : "amber"}>{w.before.length ? `${ready} of ${w.before.length} ready` : "Nothing up front"}</Tag>}
+    >
+      <div className="flex flex-col gap-1">
+        <SubHeading aside={flagged ? <Tag tone="amber">Add flow not testable</Tag> : undefined}>Before</SubHeading>
+        {flagged && <Hint>OpenID4VCI cards can't be added during a session, so this variant issues its “During” cards up front too.</Hint>}
+        {w.before.length === 0 && <Hint>Nothing: this scenario starts without these cards.</Hint>}
+        {bulk.length > 1 && (
+          <IssueRow
+            title={`All ${bulk.length} cards in one session`}
+            subtitle="IRMA issuance session"
+            source="irma"
+            instances={bulk}
+            linkForm={linkForm}
+            buttonLabel="Issue all"
+          />
+        )}
+        {w.before.map((instance, i) => {
+          const source = sourceOf(instance)
+          const format = formats[instance.card] ?? "sd"
+          return (
+            <IssueRow
+              key={`${scenario.id}-${variant}-b${i}-${format}`}
+              title={instanceTitle(instance)}
+              subtitle={typeLabel(instance, source, format)}
+              summary={summarise(instance.card, instance.values)}
+              source={source}
+              instances={[instance]}
+              veramoFormat={format}
+              linkForm={linkForm}
+              onDone={report(`b${i}`)}
+            />
+          )
+        })}
+      </div>
+
+      {w.during.length > 0 && (
+        <div className="flex flex-col gap-1 pt-2 border-t border-[#EFEBE8]">
+          <SubHeading>During: when the wallet asks to add</SubHeading>
+          <Hint>
+            {variant === "dcql" && scenario.dcql!.source !== "veramo"
+              ? "Don't add these up front. When the wallet asks, it sends you to the real staging issuer; this tool isn't involved."
+              : "Don't issue these up front: this tests adding in the middle of a session. Issue one when the wallet sends you to add it."}
+          </Hint>
+          {w.during.map((group, g) => (
+            <div key={g} className="flex flex-col pt-1">
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-[#6b6969]">{group.label}</span>
+              {group.cards.map((instance, i) => {
+                const source = sourceOf(instance)
+                return (
+                  <IssueRow
+                    key={`${scenario.id}-${variant}-d${g}-${i}`}
+                    title={instanceTitle(instance)}
+                    subtitle={typeLabel(instance, source, formats[instance.card] ?? "sd")}
+                    summary={summarise(instance.card, instance.values)}
+                    source={source}
+                    instances={[instance]}
+                    veramoFormat={formats[instance.card] ?? "sd"}
+                    linkForm={linkForm}
+                  />
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {w.absent.length > 0 && (
+        <div className="flex flex-col gap-1 pt-2 border-t border-[#EFEBE8]">
+          <SubHeading>Wallet must not contain</SubHeading>
+          {[...new Set(w.absent)].map((id) => (
+            <label key={id} className="flex items-center gap-2 min-h-8 text-[14px] text-[#484747]">
+              <input type="checkbox" className="w-4 h-4 accent-[#00508a]" /> No {inSentence(CARD_BY_ID[id].name)} besides the ones above
+            </label>
+          ))}
+          <Hint>This tool can't remove cards. Delete them in the app, or start with a fresh wallet.</Hint>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+// --- request --------------------------------------------------------------------
+
+function OptionsBar({
+  variant,
+  scenario,
+  options,
+  onOptions,
+  linkForm,
+  onLinkForm,
+  disabled,
+}: {
+  variant: Variant
+  scenario: Scenario
+  options: SessionOptions
+  onOptions: (o: SessionOptions) => void
+  linkForm: LinkForm
+  onLinkForm: (l: LinkForm) => void
+  disabled: boolean
+}) {
+  const set = <K extends keyof SessionOptions>(key: K) => (value: SessionOptions[K]) => onOptions({ ...options, [key]: value })
+  const irma = variant === "irma"
+  const isIssuance = irma && String((scenario.irma!.request as Record<string, unknown>)["@context"]).includes("/issuance/")
+  const veramo = variant === "dcql" && scenario.dcql!.source === "veramo"
+  return (
+    <div className="flex flex-col gap-3">
+      <SubHeading aside={<span className="text-[12.5px] text-[#6b6969]">Kept for every scenario</span>}>Session options</SubHeading>
+      {irma && !isIssuance && (
+        <Row label="Session type">
+          <Segmented label="Session type" disabled={disabled} value={options.kind} onChange={set("kind")} options={[{ id: "disclose", label: "Disclose" }, { id: "sign", label: "Sign a message" }]} />
+        </Row>
+      )}
+      {veramo && (
+        <Row label="Verifier identifier">
+          <Segmented label="Verifier identifier" disabled={disabled} value={options.prefix} onChange={set("prefix")} options={[{ id: "did:jwk", label: "did:jwk" }, { id: "did:web", label: "did:web" }]} />
+        </Row>
+      )}
+      <Row label="Started on">
+        <Segmented label="Started on" disabled={disabled} value={options.device} onChange={set("device")} options={[{ id: "qr", label: "Other device (QR)" }, { id: "same", label: "This phone" }]} />
+      </Row>
+      {irma && options.device === "qr" && (
+        <Row label="Pairing code">
+          <Segmented
+            label="Pairing code"
+            disabled={disabled}
+            value={options.pairing ? "on" : "off"}
+            onChange={(v) => onOptions({ ...options, pairing: v === "on" })}
+            options={[{ id: "off", label: "Off" }, { id: "on", label: "On" }]}
+          />
+        </Row>
+      )}
+      {irma && (
+        <Row label="Afterwards return to">
+          <Segmented
+            label="Afterwards return to"
+            disabled={disabled}
+            value={options.returnTo}
+            onChange={set("returnTo")}
+            options={[{ id: "none", label: "Nothing" }, { id: "website", label: "This page" }, { id: "email", label: "Email" }, { id: "phone", label: "Phone" }]}
+          />
+        </Row>
+      )}
+      <Row label="Wallet link">
+        <Segmented
+          label="Wallet link"
+          disabled={disabled}
+          value={linkForm}
+          onChange={onLinkForm}
+          options={[{ id: "scheme", label: "Custom scheme" }, { id: "universal", label: "Universal" }, { id: "universal-staging", label: "Universal (staging)" }]}
+        />
+      </Row>
+      {!irma && <Hint>Signing, a pairing code and a return address are IRMA-only, so they're hidden here.</Hint>}
+    </div>
+  )
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[13px] text-[#6b6969]">{label}</span>
+      {children}
+    </div>
+  )
+}
+
+function FormatSwitches({ scenario, formats, onFormats, disabled }: { scenario: Scenario; formats: FormatChoice; onFormats: (f: FormatChoice) => void; disabled: boolean }) {
+  const cards = veramoCards(scenario)
+  if (cards.length === 0) return null
+  const setAll = (v: VeramoFormat) => onFormats({ ...formats, ...Object.fromEntries(cards.map((c) => [c, v])) })
+  const vcdmCount = cards.filter((c) => formats[c] === "vcdm").length
+  return (
+    <div className="flex flex-col gap-2">
+      <SubHeading
+        aside={
+          <div className="flex gap-1">
+            <SmallButton variant="ghost" disabled={disabled} onClick={() => setAll("sd")}>All SD-JWT VC</SmallButton>
+            <SmallButton variant="ghost" disabled={disabled} onClick={() => setAll("vcdm")}>All VCDM</SmallButton>
+          </div>
+        }
+      >
+        Credential formats
+      </SubHeading>
+      {cards.map((c) => (
+        <div key={c} className="flex items-center justify-between gap-2 flex-wrap min-h-9">
+          <span className="text-[14px] text-[#484747]">{CARD_BY_ID[c].name}</span>
+          <Segmented
+            label={`Format for ${CARD_BY_ID[c].name}`}
+            disabled={disabled}
+            value={formats[c] ?? "sd"}
+            onChange={(v) => onFormats({ ...formats, [c]: v })}
+            options={[{ id: "sd", label: "SD-JWT VC" }, { id: "vcdm", label: "VCDM" }]}
+          />
+        </div>
+      ))}
+      <Hint>
+        {vcdmCount === 0 ? "All SD-JWT VC" : vcdmCount === cards.length ? "All VCDM 2.0 SD-JWT" : `Mixed: ${vcdmCount} of ${cards.length} cards as VCDM`}. Changing a format changes what setup issues too.
+      </Hint>
+    </div>
+  )
+}
+
+type Phase = "ready" | "running" | "done" | "error"
+
+// --- page -------------------------------------------------------------------------
+
+export default function ScenarioPage(props: ScenarioPageProps) {
+  const { scenario, variant, onVariant, formats, onFormats, options, onOptions, linkForm, onLinkForm, onOpenInPlayground } = props
+  const generated = useMemo(() => requestBody(scenario, variant, formats, options), [scenario, variant, formats, options])
+  const [edited, setEdited] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [phase, setPhase] = useState<Phase>("ready")
+  const [disclosure, setDisclosure] = useState<Disclosure | null>(null)
+  const [result, setResult] = useState<DisclosureResult | null>(null)
+  const [error, setError] = useState("")
+  const [isPairing, setIsPairing] = useState(false)
+  const [pairingCode, setPairingCode] = useState("")
+  const [pairingError, setPairingError] = useState("")
+  const [showRaw, setShowRaw] = useState(false)
+  const [checks, setChecks] = useState<Record<number, boolean>>({})
+  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
+  const body = edited ?? generated
+  const v = variant === "irma" ? scenario.irma! : scenario.dcql!
+
+  const stop = () => clearInterval(timer.current)
+  useEffect(() => stop, [])
+
+  const start = async () => {
+    setError("")
+    setResult(null)
+    setIsPairing(false)
+    setPairingCode("")
+    try {
+      JSON.parse(body)
+    } catch {
+      setError("The request is not valid JSON.")
+      setPhase("error")
+      return
+    }
+    try {
+      const d = await startDisclosure(scenario, variant, body, options)
+      setDisclosure(d)
+      setPhase("running")
+      stop()
+      timer.current = setInterval(async () => {
+        try {
+          if (d.pairing && (await d.pairing.isPairing())) setIsPairing(true)
+          const r = await d.poll()
+          if (r) {
+            stop()
+            setResult(r)
+            setPhase("done")
+          }
+        } catch (e) {
+          stop()
+          setError(e instanceof Error ? e.message : String(e))
+          setPhase("error")
+        }
+      }, 700)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setPhase("error")
+    }
+  }
+
+  const cancel = () => {
+    stop()
+    setPhase("ready")
+  }
+
+  const submitPairing = async () => {
+    if (!disclosure?.pairing) return
+    const ok = await disclosure.pairing.complete(pairingCode)
+    setPairingError(ok ? "" : "That code doesn't match the one the wallet shows.")
+    if (ok) setIsPairing(false)
+  }
+
+  const link = disclosure ? applyLinkForm(disclosure.walletLink, linkForm, hostForLinkForm(linkForm)) : ""
+  const running = phase === "running"
+  const statusTone = phase === "done" ? "green" : phase === "running" ? "amber" : phase === "error" ? "red" : "grey"
+  const statusLabel = { ready: "No session yet", running: "Waiting", done: "Done", error: "Failed" }[phase]
+  const endpoint = variant === "irma" ? "IRMA server" : scenario.dcql!.source === "veramo" ? `Veramo verifier (${options.prefix})` : "EUDI verifier"
+  const checkedCount = Object.values(checks).filter(Boolean).length
+
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-wrap gap-4 items-end justify-between">
+        <div className="flex flex-col gap-1 min-w-0 max-w-3xl">
+          <span className="text-[12px] font-semibold uppercase tracking-wide text-[#6b6969]">
+            {scenario.group} · {scenario.id}
+          </span>
+          <h1 className="text-2xl font-bold text-[#484747] m-0">{scenario.title}</h1>
+          <p className="text-[14px] leading-[22px] text-[#5f5d5d] m-0">{scenario.description}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <Segmented<Variant>
+            label="Protocol variant"
+            value={variant}
+            onChange={onVariant}
+            disabled={running}
+            options={[
+              { id: "irma", label: "IRMA", disabled: !scenario.irma },
+              { id: "dcql", label: scenario.dcql ? `DCQL · ${scenario.dcql.source === "veramo" ? "Veramo" : "EUDI"} verifier` : "DCQL", disabled: !scenario.dcql },
+            ]}
+          />
+          <a
+            href={`${PROTOTYPE_URL}#artboard-${scenario.prototypeFrame}`}
+            target="_blank"
+            rel="noreferrer"
+            className="min-h-9 inline-flex items-center px-3 rounded-md border border-[#484747] text-[13.5px] font-semibold text-[#484747] no-underline hover:bg-[#eae5e2]"
+          >
+            Wallet prototype
+          </a>
+        </div>
+      </header>
+
+      <div className="flex flex-col gap-1">
+        {(["irma", "dcql"] as const).map((p) =>
+          scenario.unavailable[p] ? (
+            <Hint key={p}>
+              No {p === "irma" ? "IRMA" : "DCQL"} variant: {scenario.unavailable[p]}
+            </Hint>
+          ) : null
+        )}
+        {v.status !== "native" || v.note ? (
+          <div className="flex gap-2 items-start">
+            <Tag tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Tag>
+            {v.note && <span className="text-[13.5px] text-[#484747]">{v.note}</span>}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid gap-6 items-start grid-cols-1 xl:grid-cols-3">
+        <SetupColumn scenario={scenario} variant={variant} formats={formats} linkForm={linkForm} />
+
+        <Panel title="Request" id="req-h" aside={<span className="font-mono text-[12px] text-[#6b6969]">{endpoint}</span>}>
+          <FormatSwitches scenario={variant === "dcql" ? scenario : { ...scenario, dcql: undefined }} formats={formats} onFormats={onFormats} disabled={running} />
+          <div className="flex flex-col gap-2">
+            {editing ? (
+              <JsonEditor value={body} onChange={setEdited} />
+            ) : (
+              <JsonView value={body} maxHeight="22rem" label="request" />
+            )}
+            <div className="flex flex-wrap gap-1">
+              <SmallButton variant="ghost" disabled={running} onClick={() => setEditing((e) => !e)}>
+                {editing ? "Done editing" : "Edit"}
+              </SmallButton>
+              {edited !== null && (
+                <SmallButton variant="ghost" disabled={running} onClick={() => setEdited(null)}>
+                  Reset to scenario
+                </SmallButton>
+              )}
+              <SmallButton variant="ghost" onClick={() => onOpenInPlayground(variant, body)}>
+                Open in playground
+              </SmallButton>
+            </div>
+            {edited !== null && <Hint>Edited: options and formats no longer change this text until you reset it.</Hint>}
+          </div>
+          <div className="pt-2 border-t border-[#EFEBE8]">
+            <OptionsBar variant={variant} scenario={scenario} options={options} onOptions={onOptions} linkForm={linkForm} onLinkForm={onLinkForm} disabled={running} />
+          </div>
+          {phase !== "running" ? (
+            <button type="button" className="btn-primary w-full" onClick={start}>
+              {phase === "ready" ? "Start session" : "Start again"}
+            </button>
+          ) : (
+            <div className="flex flex-col items-center gap-3 p-4 rounded-lg bg-[#F5FAFC] border border-[#CFE4EF]">
+              {options.device === "qr" ? (
+                <QRCodeComponent text={stampSecondDeviceForQr(link)} size={220} />
+              ) : (
+                <Hint>Started on this phone: open the wallet with the button.</Hint>
+              )}
+              <span className="font-semibold text-[#484747]">Waiting for the wallet…</span>
+              {isPairing && (
+                <div className="flex flex-col gap-2 w-full">
+                  <label htmlFor="pairing-code" className="text-[13.5px] text-[#484747]">
+                    Enter the code the wallet shows
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="pairing-code"
+                      inputMode="numeric"
+                      value={pairingCode}
+                      onChange={(e) => setPairingCode(e.target.value)}
+                      className="flex-1 min-h-9 px-3 rounded-md border border-[#D7D2CD] font-mono tracking-widest"
+                    />
+                    <SmallButton variant="primary" onClick={submitPairing}>
+                      Pair
+                    </SmallButton>
+                  </div>
+                  {pairingError && <span className="text-[13px] text-[#a8172f]">{pairingError}</span>}
+                </div>
+              )}
+              <div className="flex gap-2 flex-wrap justify-center">
+                <a href={link} className="btn-primary no-underline">
+                  Open Yivi
+                </a>
+                <button type="button" className="btn-secondary" onClick={cancel}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Result" id="res-h" aside={<Tag tone={statusTone}>{statusLabel}</Tag>}>
+          {phase === "error" && (
+            <p role="alert" className="text-[14px] text-[#a8172f] m-0 break-words">
+              {error}
+            </p>
+          )}
+          {result ? (
+            <div className="flex flex-col gap-3">
+              {result.groups.length === 0 && <Hint>Nothing was disclosed.</Hint>}
+              {result.groups.map((g, i) => (
+                <div key={i} className="rounded-lg border border-[#CFE4EF] overflow-hidden">
+                  {g.label && <div className="px-4 py-2 bg-[#E8F3F9] border-b border-[#CFE4EF] text-[13px] font-semibold text-[#00508a] break-all">{g.label}</div>}
+                  <DisclosureTable rows={g.disclosures} keyPrefix={String(i)} />
+                </div>
+              ))}
+              <button
+                type="button"
+                className="self-start text-[13px] font-semibold text-[#00508a] bg-transparent border-0 p-0 cursor-pointer"
+                aria-expanded={showRaw}
+                onClick={() => setShowRaw((s) => !s)}
+              >
+                {showRaw ? "Hide raw response" : "Show raw response"}
+              </button>
+              {showRaw && <JsonView value={result.raw} maxHeight="24rem" label="raw response" />}
+            </div>
+          ) : (
+            phase !== "error" && <Hint>Disclosed attributes appear here, one table per credential.</Hint>
+          )}
+          <div className="flex flex-col gap-1">
+            <SubHeading>Expected disclosure</SubHeading>
+            <p className="text-[14px] leading-[21px] text-[#484747] m-0">{scenario.expected}</p>
+          </div>
+          <div className="flex flex-col gap-1 pt-2 border-t border-[#EFEBE8]">
+            <SubHeading aside={<span className="text-[12.5px] text-[#6b6969]">{checkedCount} of {scenario.lookFor.length}</span>}>Look for</SubHeading>
+            {scenario.lookFor.map((text, i) => (
+              <label key={i} className="flex gap-2 items-start min-h-8 text-[14px] leading-[21px] text-[#484747]">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 mt-0.5 shrink-0 accent-[#00508a]"
+                  checked={!!checks[i]}
+                  onChange={(e) => setChecks((c) => ({ ...c, [i]: e.target.checked }))}
+                />
+                <span>{text}</span>
+              </label>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  )
+}

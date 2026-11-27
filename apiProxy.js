@@ -129,6 +129,61 @@ export function mountApiProxy(app, config) {
     })
   })
 
+  // Issuance records and revocation, for scenario setup steps that revoke the
+  // credential they just issued. list-credentials answers oldest first; the
+  // browser takes the newest record of the type it just issued.
+  app.post("/api/issuer/:issuerKey/credentials", rawJson, (req, res) => {
+    const name = resolveIssuer(req, res)
+    if (!name) return
+    forward(res, `${config.issuerApiUrl}/${name}/api/list-credentials`, {
+      method: "POST",
+      headers: { ...jsonHeaders, Authorization: `Bearer ${config.issuerToken}` },
+      body: req.body,
+    })
+  })
+
+  app.post("/api/issuer/:issuerKey/revoke", rawJson, (req, res) => {
+    const name = resolveIssuer(req, res)
+    if (!name) return
+    forward(res, `${config.issuerApiUrl}/${name}/api/revoke-credential`, {
+      method: "POST",
+      headers: { ...jsonHeaders, Authorization: `Bearer ${config.issuerToken}` },
+      body: req.body,
+    })
+  })
+
+  // --- IRMA chained sessions -------------------------------------------------
+  // The IRMA server POSTs a finished session's result to a request's
+  // `nextSession.url` and starts whatever session request comes back. This serves
+  // the follow-up requests scenarios name, from an allow-list. Only reachable when
+  // the IRMA server can reach this tool, so not from localhost.
+  const nextSessions = {
+    address: {
+      "@context": "https://irma.app/ld/request/issuance/v2",
+      credentials: [
+        {
+          credential: "irma-demo.gemeente.address",
+          attributes: {
+            street: "Lindelaan",
+            houseNumber: "12",
+            zipcode: "1234 AB",
+            municipality: "Rijnstad",
+            city: "Rijnstad",
+          },
+        },
+      ],
+    },
+  }
+
+  app.post("/api/irma/next-session/:name", express.json({ limit: "256kb" }), (req, res) => {
+    const next = nextSessions[req.params.name]
+    if (!next) {
+      res.status(404).json({ error: "unknown_next_session" })
+      return
+    }
+    res.json(next)
+  })
+
   // --- EUDI issuer ----------------------------------------------------------
   // The only route that does not forward the editor's bytes as-is, because
   // /credentialOfferReq2 does not take JSON: it takes a form field holding a

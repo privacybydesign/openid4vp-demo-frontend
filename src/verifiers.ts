@@ -41,7 +41,7 @@ function sdJwtVct(sdjwt: string): string | undefined {
 // them, depending on whether the query asked for several (`multiple: true`, or a
 // credential_set matched more than once). Both shapes have to be read: assuming
 // the array threw a TypeError on the string form.
-function presentationsOf(entry: unknown): string[] {
+export function presentationsOf(entry: unknown): string[] {
   if (typeof entry === "string") return [entry]
   if (Array.isArray(entry)) return entry.filter((item): item is string => typeof item === "string")
   return []
@@ -50,7 +50,7 @@ function presentationsOf(entry: unknown): string[] {
 // An SD-JWT VC is tilde-separated by construction, and base64 has no tilde in
 // either alphabet — so the presentation itself says which format it is, without
 // having to parse back the request that asked for it.
-function describePresentation(queryId: string, presentation: string): DisclosureGroup {
+export function describePresentation(queryId: string, presentation: string): DisclosureGroup {
   if (presentation.includes("~")) {
     return { label: groupLabel(queryId, sdJwtVct(presentation)), disclosures: parseSdJwtVc(presentation) }
   }
@@ -112,7 +112,7 @@ const EUDI_INTENDED_USE_ID = "1"
 // matches a `vcts` entry. See verifier_attestation_vcts and
 // verifier_attestation_doctypes in openid4vc-poc-ops' variables.tf. The mdoc
 // presets below have their docTypes listed; a pasted one may not.
-function eudiRequest(dcql_query: object): object {
+export function eudiRequest(dcql_query: object): object {
   return {
     dcql_query,
     nonce: "nonce",
@@ -1239,7 +1239,7 @@ interface IrmaDisclosedAttribute {
 
 // One group per discon, unlabelled: WalletResponseView renders label-less groups
 // as the single flat table this tab has always shown.
-function parseIrmaResult(result: unknown): DisclosureGroup[] {
+export function parseIrmaResult(result: unknown): DisclosureGroup[] {
   const disclosed = (result as { disclosed?: IrmaDisclosedAttribute[][] })?.disclosed
   if (!disclosed) return []
   return disclosed.map((discon) => ({

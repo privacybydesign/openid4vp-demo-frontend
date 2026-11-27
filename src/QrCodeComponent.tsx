@@ -4,20 +4,21 @@ import QRCode from 'qrcode';
 
 interface QRCodeComponentProps {
   text: string;
+  size?: number;
 }
 
-const QRCodeComponent = ({ text }: QRCodeComponentProps) => {
+const QRCodeComponent = ({ text, size = 300 }: QRCodeComponentProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, text, { width: 300 }, (error: Error | null | undefined) => {
+      QRCode.toCanvas(canvasRef.current, text, { width: size }, (error: Error | null | undefined) => {
         if (error) console.error(error);
       });
     }
-  }, [text]);
+  }, [text, size]);
 
-  return <canvas ref={canvasRef} />;
+  return <canvas ref={canvasRef} role="img" aria-label="QR code" />;
 };
 
 export default QRCodeComponent;
