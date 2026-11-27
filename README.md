@@ -1,7 +1,9 @@
 # openid4vp-demo-frontend
 
 A small Vite + React tool for exercising the Yivi verifier and Veramo
-verifier/issuer flows (IRMA, EUDI, Veramo Verifier, Veramo Issuer tabs).
+verifier/issuer flows. It is organised around **scenarios**: the 44 cases of the
+wallet prototype, each with the wallet setup it needs and a native request per
+protocol. The old per-implementation tabs live on as the **Playground**.
 
 ## Architecture
 
@@ -19,6 +21,9 @@ credential-free, same-origin routes to the SPA:
 | `GET  /api/didweb-verifier/offer/:state` | `…/{verifier}/api/check-offer/{state}` |
 | `POST /api/issuer/:key/offer`       | `…/{issuer}/api/create-offer`             |
 | `POST /api/issuer/:key/offer/check` | `…/{issuer}/api/check-offer`              |
+| `POST /api/issuer/:key/credentials` | `…/{issuer}/api/list-credentials`         |
+| `POST /api/issuer/:key/revoke`      | `…/{issuer}/api/revoke-credential`        |
+| `POST /api/irma/next-session/:name` | (served here: an allow-listed IRMA next-session request) |
 
 `:key` is an allow-listed issuer key (`pre-auth` \| `authcode`) mapped to a real
 issuer name server-side. The same proxy is mounted on the Vite dev server (via
@@ -97,9 +102,35 @@ scripts/generate-pbdf-credentials.py path/to/irma_configuration/pbdf
 It needs Chrome 128+ on Android with `chrome://flags/#digital-credentials`
 enabled, the Yivi app with Digital Credentials support, and HTTPS (or localhost).
 
-## Build / lint
+## Scenarios
+
+The sidebar lists the wallet prototype's scenarios, grouped as on the prototype
+canvas. A scenario page has three columns:
+
+- **Wallet setup**: what has to be in the wallet *Before* the session, what the
+  wallet adds *During* it, and what it *must not contain*. Every card can be
+  issued from its row; rows that need a revoked or expiring card do that step
+  right after issuing.
+- **Request**: the exact body that is POSTed, highlighted (or editable), the
+  per-card Veramo format (SD-JWT VC or VCDM) and the session options.
+- **Result**: one table per disclosed credential, the raw response, the expected
+  disclosure and a Look-for checklist.
+
+A variant exists only where its protocol expresses the scenario natively. Where
+the cards come from is decided per variant: irma-demo for IRMA, pbdf-staging on
+the EUDI verifier when the wallet has to add cards mid-session, Veramo when the
+values matter, and the EUDI issuer for the real PID and mdocs. The scenarios live
+in `src/scenarios/`; the card catalogue (`cards.ts`) maps each abstract card onto
+each source. **Coverage** (generated from that data) shows what every scenario
+can and can't do, and why.
+
+All raw JSON is shown through `JsonView`, so it is always highlighted; ESLint
+rejects `JSON.stringify` inside JSX.
+
+## Build / lint / test
 
 ```sh
 npm run build   # tsc -b && vite build
 npm run lint
+npm test        # scenario data consistency checks (vitest)
 ```
