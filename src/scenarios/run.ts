@@ -93,6 +93,8 @@ async function issueVeramo(instance: CardInstance, format: VeramoFormat): Promis
     credentialDataSupplierInput: def.veramo!.data(cardValues(instance.card, instance.values)),
   }
   const response = await postJson(`/api/issuer/${VERAMO_ISSUER_KEY}/offer`, request)
+  if (response.status === 401)
+    throw new Error("The Veramo issuer rejected the admin token (HTTP 401). Set a token it accepts as VERAMO_ISSUER_ADMIN_TOKEN in .env and restart the dev server.")
   if (!response.ok) throw new Error(`Failed to create credential offer (HTTP ${response.status})`)
   const offer = (await response.json()) as { uri?: string; id?: string; txCode?: string }
   if (!offer.uri || !offer.id) throw new Error("Offer response is missing 'uri' or 'id'")
@@ -365,6 +367,10 @@ async function startVeramoVerifier(body: string, prefix: SessionOptions["prefix"
     headers: { "Content-Type": "application/json" },
     body,
   })
+  if (response.status === 401)
+    throw new Error(
+      `The Veramo ${verifier} rejected the admin token (HTTP 401). Set a token it accepts as ${verifier === "verifier" ? "VERAMO_ADMIN_TOKEN" : "VERAMO_DIDWEB_ADMIN_TOKEN"} in .env and restart the dev server.`
+    )
   if (!response.ok) throw new Error(`Failed to create DCQL offer (HTTP ${response.status})`)
   const json = (await response.json()) as { state?: string; requestUri?: string }
   if (!json.state || !json.requestUri) throw new Error("Offer response is missing 'state' or 'requestUri'")
