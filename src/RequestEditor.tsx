@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react"
-import { EditorView, basicSetup } from "codemirror"
-import { json } from "@codemirror/lang-json"
-import { catppuccinLatte } from "@catppuccin/codemirror"
+import { EditorView } from "codemirror"
 import { EditorState } from "@codemirror/state"
+import { jsonEditorExtensions } from "./codemirrorSetup"
 import type { ClientIdPrefix, Preset, TabId } from "./tabs"
 import type { LinkForm } from "./walletLink"
 import compactJson from "./compactJson"
@@ -86,21 +85,7 @@ export default function RequestEditor({
     const view = new EditorView({
       state: EditorState.create({
         doc: defaultValue,
-        extensions: [
-          basicSetup,
-          json(),
-          catppuccinLatte,
-          EditorView.lineWrapping,
-          EditorView.theme({
-            "&": { fontSize: "14px" },
-            ".cm-content": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" },
-          }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              onChange(update.state.doc.toString())
-            }
-          }),
-        ],
+        extensions: jsonEditorExtensions(onChange),
       }),
       parent: editorRef.current,
     })

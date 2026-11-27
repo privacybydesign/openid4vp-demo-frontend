@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { EditorView, basicSetup } from 'codemirror'
-import { json } from '@codemirror/lang-json'
-import { catppuccinLatte } from '@catppuccin/codemirror'
+import { EditorView } from 'codemirror'
 import { EditorState } from '@codemirror/state'
+import { jsonEditorExtensions } from './codemirrorSetup'
+import JsonView from './JsonView'
 import pbdfCredentials from './pbdfCredentials.json'
 import ErrorView from './ErrorView'
 import WalletResponseView from './WalletResponseView'
@@ -109,19 +109,7 @@ function JsonEditor({ value, onChange }: JsonEditorProps) {
   useEffect(() => {
     const view = new EditorView({
       state: EditorState.create({
-        extensions: [
-          basicSetup,
-          json(),
-          catppuccinLatte,
-          EditorView.lineWrapping,
-          EditorView.theme({
-            '&': { fontSize: '14px' },
-            '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-          }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current(update.state.doc.toString())
-          }),
-        ],
+        extensions: jsonEditorExtensions((value) => onChangeRef.current(value)),
       }),
       parent: hostRef.current!,
     })
@@ -335,9 +323,7 @@ function DigitalCredentialsDemo() {
               Shown as received: this page does not verify the presentation.
             </p>
             <h3 className="text-[15px] font-semibold text-[#484747]">Raw response</h3>
-            <pre className="p-4 rounded-lg border border-[#CFE4EF] bg-white text-sm whitespace-pre-wrap break-all">
-              {JSON.stringify(responseData, null, 2)}
-            </pre>
+            <JsonView value={responseData} label="raw response" />
           </>
         )}
 

@@ -34,6 +34,15 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Raw JSON is always shown highlighted, through <JsonView>.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "JSXExpressionContainer CallExpression[callee.object.name='JSON'][callee.property.name='stringify']",
+          message: 'Show JSON with <JsonView> so it is syntax-highlighted.',
+        },
+      ],
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
