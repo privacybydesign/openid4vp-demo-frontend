@@ -8,7 +8,7 @@ import { requestBody, startDisclosure } from "./scenarios/run"
 import type { Disclosure, DisclosureResult, SessionOptions } from "./scenarios/run"
 import IssueRow from "./IssueRow"
 import JsonView from "./JsonView"
-import JsonEditor from "./JsonEditor"
+import RequestDialog from "./RequestDialog"
 import QRCodeComponent from "./QrCodeComponent"
 import { DisclosureTable } from "./WalletResponseView"
 import { applyLinkForm, stampSecondDeviceForQr } from "./walletLink"
@@ -275,13 +275,46 @@ function FormatSwitches({ scenario, formats, onFormats, disabled }: { scenario: 
 
 type Phase = "ready" | "running" | "done" | "error"
 
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`
+}
+
+// What the request asks for, in one line, so the column can stay compact and the
+// full JSON only opens when wanted.
+function summariseRequest(body: string): { title: string; detail: string } {
+  try {
+    const r = JSON.parse(body) as Record<string, unknown>
+    const dcql = (r.dcql_query ?? r.dcql) as { credentials?: unknown[]; credential_sets?: { required?: boolean }[] } | undefined
+    if (dcql) {
+      const sets = dcql.credential_sets ?? []
+      const optional = sets.filter((s) => s.required === false).length
+      return {
+        title: "DCQL query",
+        detail: [plural(dcql.credentials?.length ?? 0, "credential query"), sets.length ? plural(sets.length, "credential set") : null, optional ? `${optional} optional` : null]
+          .filter(Boolean)
+          .join(" · "),
+      }
+    }
+    const context = String(r["@context"] ?? "")
+    const kind = context.includes("/signature/") ? "IRMA signature request" : context.includes("/issuance/") ? "IRMA issuance + disclosure" : "IRMA condiscon"
+    const disclose = (r.disclose ?? []) as unknown[][][]
+    const optional = disclose.filter((d) => d.some((con) => con.length === 0)).length
+    return {
+      title: kind,
+      detail: [plural(disclose.length, "discon"), optional ? `${optional} optional` : null, r.nextSession ? "chained" : null].filter(Boolean).join(" · "),
+    }
+  } catch {
+    return { title: "Edited request", detail: "Not valid JSON yet" }
+  }
+}
+
 // --- page -------------------------------------------------------------------------
 
 export default function ScenarioPage(props: ScenarioPageProps) {
   const { scenario, variant, onVariant, formats, onFormats, options, onOptions, linkForm, onLinkForm, onOpenInPlayground } = props
   const generated = useMemo(() => requestBody(scenario, variant, formats, options), [scenario, variant, formats, options])
   const [edited, setEdited] = useState<string | null>(null)
-  const [editing, setEditing] = useState(false)
+  const [dialog, setDialog] = useState<"view" | "edit" | null>(null)
   const [phase, setPhase] = useState<Phase>("ready")
   const [disclosure, setDisclosure] = useState<Disclosure | null>(null)
   const [result, setResult] = useState<DisclosureResult | null>(null)
@@ -294,6 +327,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
   const body = edited ?? generated
   const v = variant === "irma" ? scenario.irma! : scenario.dcql!
+  const summary = summariseRequest(body)
 
   const stop = () => clearInterval(timer.current)
   useEffect(() => stop, [])
@@ -409,15 +443,27 @@ export default function ScenarioPage(props: ScenarioPageProps) {
         <Panel title="Request" id="req-h" aside={<span className="font-mono text-[12px] text-[#6b6969]">{endpoint}</span>}>
           <FormatSwitches scenario={variant === "dcql" ? scenario : { ...scenario, dcql: undefined }} formats={formats} onFormats={onFormats} disabled={running} />
           <div className="flex flex-col gap-2">
-            {editing ? (
-              <JsonEditor value={body} onChange={setEdited} />
-            ) : (
-              <JsonView value={body} maxHeight="22rem" label="request" />
-            )}
+            <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-lg bg-[#F5FAFC] border border-[#CFE4EF]">
+              <div className="flex flex-col min-w-0">
+                <span className="text-[14px] font-semibold text-[#484747]">{summary.title}</span>
+                <span className="text-[13px] text-[#6b6969]">{summary.detail}</span>
+              </div>
+              <div className="flex gap-1">
+                <SmallButton onClick={() => setDialog("view")}>View</SmallButton>
+                <SmallButton variant="ghost" disabled={running} onClick={() => setDialog("edit")}>
+                  Edit
+                </SmallButton>
+              </div>
+            </div>
+            <RequestDialog
+              open={dialog !== null}
+              title={`${scenario.title} · ${variant === "irma" ? "IRMA request" : "DCQL request"}`}
+              value={body}
+              editing={dialog === "edit"}
+              onChange={setEdited}
+              onClose={() => setDialog(null)}
+            />
             <div className="flex flex-wrap gap-1">
-              <SmallButton variant="ghost" disabled={running} onClick={() => setEditing((e) => !e)}>
-                {editing ? "Done editing" : "Edit"}
-              </SmallButton>
               {edited !== null && (
                 <SmallButton variant="ghost" disabled={running} onClick={() => setEdited(null)}>
                   Reset to scenario

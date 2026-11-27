@@ -86,7 +86,7 @@ export default function CardCatalogue({ linkForm, onLinkForm }: { linkForm: Link
       </header>
 
       <div className="flex flex-wrap gap-6 items-start">
-        <nav aria-label="Cards" className="flex-1 basis-72 max-w-sm min-w-0 bg-white rounded-lg border border-[#E6E1DD] p-2 flex flex-col gap-0.5">
+        <nav aria-label="Cards" className="flex-1 basis-72 max-w-sm min-w-0 bg-white rounded-lg border border-[#E6E1DD] p-2 flex flex-col gap-0.5 md:sticky md:top-0 md:max-h-[calc(100vh-7.5rem)] md:overflow-y-auto">
           <div className="px-2 pt-2 pb-3 border-b border-[#EFEBE8] mb-1">
             <Segmented<"All" | Format>
               label="Filter by format"
