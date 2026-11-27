@@ -2,7 +2,6 @@ import { useMemo, useState } from "react"
 import { GROUPS } from "./scenarios/types"
 import type { GroupId, Scenario } from "./scenarios/types"
 import { SCENARIOS } from "./scenarios/index"
-import { Tag } from "./ui"
 import type { Route } from "./route"
 
 type Filter = "all" | "irma" | "dcql"
@@ -12,8 +11,11 @@ interface SidebarProps {
   onNavigate: (route: Route) => void
 }
 
-function protocolTone(status: string | undefined): "blue" | "amber" {
-  return status === "native" ? "blue" : "amber"
+// What the row shows on hover: which protocols the scenario has, and why one is missing.
+function protocolHint(s: Scenario): string {
+  const line = (name: string, v: { status: string } | undefined, reason: string | undefined) =>
+    v ? `${name}${v.status === "native" ? "" : ` (${v.status})`}` : `No ${name}${reason ? `: ${reason}` : ""}`
+  return [line("IRMA", s.irma, s.unavailable.irma), line("DCQL", s.dcql, s.unavailable.dcql)].join("\n")
 }
 
 function matches(s: Scenario, query: string): boolean {
@@ -44,15 +46,13 @@ export default function Sidebar({ route, onNavigate }: SidebarProps) {
 
   return (
     <nav aria-label="Scenarios" className="flex flex-col gap-2 p-3">
-      <label htmlFor="scenario-search" className="text-[12px] font-semibold uppercase tracking-wide text-[#6b6969] px-1">
-        Find a scenario
-      </label>
       <input
         id="scenario-search"
+        aria-label="Find a scenario"
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Title or prototype id"
+        placeholder="Find a scenario"
         className="min-h-10 px-3 rounded-md border border-[#D7D2CD] bg-white text-[14px]"
       />
       <div role="radiogroup" aria-label="Protocol filter" className="flex gap-1">
@@ -93,13 +93,10 @@ export default function Sidebar({ route, onNavigate }: SidebarProps) {
                   type="button"
                   aria-current={s.id === current ? "page" : undefined}
                   onClick={() => onNavigate({ view: "scenario", scenario: s.id })}
-                  className={`${linkClass(s.id === current)} flex items-center justify-between gap-2 py-1`}
+                  title={protocolHint(s)}
+                  className={`${linkClass(s.id === current)} py-1`}
                 >
-                  <span className="min-w-0">{s.title}</span>
-                  <span className="flex gap-1 shrink-0">
-                    {s.irma && <Tag tone={protocolTone(s.irma.status)}>IRMA</Tag>}
-                    {s.dcql && <Tag tone={protocolTone(s.dcql.status)}>DCQL</Tag>}
-                  </span>
+                  {s.title}
                 </button>
               ))}
           </div>

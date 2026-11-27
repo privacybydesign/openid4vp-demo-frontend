@@ -16,6 +16,8 @@ interface IssueRowProps {
   title: string
   subtitle: string
   summary?: string
+  // Show the summary inline, for a card that appears more than once in a setup.
+  showSummary?: boolean
   source: Source
   instances: CardInstance[]
   veramoFormat?: VeramoFormat
@@ -48,6 +50,7 @@ export default function IssueRow({
   title,
   subtitle,
   summary,
+  showSummary = false,
   source,
   instances,
   veramoFormat,
@@ -144,16 +147,16 @@ export default function IssueRow({
   const pbdfHint = CARD_BY_ID[instances[0].card].pbdf?.addHint
 
   return (
-    <div className="flex flex-col gap-2 py-2 border-t border-[#EFEBE8] first:border-t-0">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-0.5 min-w-0">
+    <div className="flex flex-col gap-2 py-1.5 border-t border-[#EFEBE8] first:border-t-0">
+      <div className="flex items-center justify-between gap-3 min-h-9">
+        {/* The type and values are on hover: the row itself is just what to issue. */}
+        <div className="flex items-baseline gap-2 flex-wrap min-w-0 cursor-default" title={[subtitle, summary].filter(Boolean).join("\n")}>
           <span className="font-semibold text-[14.5px] text-[#484747]">{title}</span>
-          <span className="font-mono text-[12px] text-[#6b6969] break-all">{subtitle}</span>
-          {summary && <span className="text-[13px] text-[#6b6969]">{summary}</span>}
-          {wantRevoked && <span className="text-[13px] text-[#a8172f]">Revoked right after issuing</span>}
+          {showSummary && summary && <span className="text-[13px] text-[#6b6969] break-all">{summary}</span>}
+          {wantRevoked && <span className="text-[13px] text-[#a8172f]">revoked after issuing</span>}
           {wantExpired && (
             <span className="text-[13px] text-[#7a5212]">
-              {secondsLeft === null ? `Expires ${EXPIRES_IN_SECONDS} s after issuing` : secondsLeft > 0 ? `Expires in ${secondsLeft} s` : "Expired"}
+              {secondsLeft === null ? `expires ${EXPIRES_IN_SECONDS} s after issuing` : secondsLeft > 0 ? `expires in ${secondsLeft} s` : "expired"}
             </span>
           )}
         </div>
@@ -181,7 +184,7 @@ export default function IssueRow({
       </div>
 
       {source === "pbdf" && pbdfHint && (
-        <p className="text-[13px] text-[#6b6969] m-0">In the Yivi app (staging scheme): Add data → {pbdfHint}.</p>
+        <p className="text-[13px] text-[#6b6969] m-0">In Yivi: Add data → {pbdfHint}</p>
       )}
       {source !== "pbdf" && blocked && <p className="text-[13px] text-[#7a5212] m-0">{blocked}</p>}
       {state === "error" && (

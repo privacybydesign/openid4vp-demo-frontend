@@ -16,7 +16,6 @@ import { applyLinkForm, stampSecondDeviceForQr } from "./walletLink"
 import type { LinkForm } from "./walletLink"
 import { hostForLinkForm } from "./linkHost"
 import { Hint, Panel, Segmented, SmallButton, SubHeading, Tag } from "./ui"
-import { STATUS_LABEL, STATUS_TONE } from "./status"
 
 interface ScenarioPageProps {
   scenario: Scenario
@@ -80,6 +79,9 @@ function SetupColumn({
   // One IRMA session can issue every plain "Before" card at once; revoked or
   // expiring ones keep their own rows, since they need a follow-up step each.
   const bulk = variant === "irma" ? w.before.filter((i) => !i.state) : []
+  // A card that appears more than once needs its value to tell the rows apart.
+  const all = [...w.before, ...w.during.flatMap((g) => g.cards)]
+  const repeated = (i: CardInstance) => all.filter((x) => x.card === i.card).length > 1
   const flagged = variant === "dcql" && scenario.dcql!.during === "upFront" && (scenario.dcql!.wallet ?? scenario.wallet).during.length > 0
 
   return (
@@ -87,16 +89,16 @@ function SetupColumn({
       title="Wallet setup"
       id="setup-h"
       className={className}
-      aside={<Tag tone={ready === w.before.length ? "green" : "amber"}>{w.before.length ? `${ready} of ${w.before.length} ready` : "Nothing up front"}</Tag>}
+      aside={w.before.length ? <Tag tone={ready === w.before.length ? "green" : "amber"}>{`${ready} of ${w.before.length} ready`}</Tag> : undefined}
     >
       <div className="flex flex-col gap-1">
-        <SubHeading aside={flagged ? <Tag tone="amber">Add flow not testable</Tag> : undefined}>Before</SubHeading>
-        {flagged && <Hint>OpenID4VCI cards can't be added during a session, so this variant issues its “During” cards up front too.</Hint>}
-        {w.before.length === 0 && <Hint>Nothing: this scenario starts without these cards.</Hint>}
+        <SubHeading>Before</SubHeading>
+        {flagged && <Hint>Includes the “during” cards: OpenID4VCI can't add cards mid-session.</Hint>}
+        {w.before.length === 0 && <Hint>Nothing: the wallet starts without these cards.</Hint>}
         {bulk.length > 1 && (
           <IssueRow
-            title={`All ${bulk.length} cards in one session`}
-            subtitle="IRMA issuance session"
+            title={`All ${bulk.length} at once`}
+            subtitle="One IRMA issuance session"
             source="irma"
             instances={bulk}
             linkForm={linkForm}
@@ -113,6 +115,7 @@ function SetupColumn({
               title={instanceTitle(instance)}
               subtitle={typeLabel(instance, source, format)}
               summary={summarise(instance.card, instance.values)}
+              showSummary={repeated(instance)}
               source={source}
               instances={[instance]}
               veramoFormat={format}
@@ -126,11 +129,11 @@ function SetupColumn({
 
       {w.during.length > 0 && (
         <div className="flex flex-col gap-1 pt-2 border-t border-[#EFEBE8]">
-          <SubHeading>During: when the wallet asks to add</SubHeading>
+          <SubHeading>During</SubHeading>
           <Hint>
             {variant === "dcql" && scenario.dcql!.source !== "veramo"
-              ? "Don't add these up front. When the wallet asks, it sends you to the real staging issuer; this tool isn't involved."
-              : "Don't issue these up front: this tests adding in the middle of a session. Issue one when the wallet sends you to add it."}
+              ? "Only when the wallet asks; it sends you to the staging issuer itself."
+              : "Only when the wallet asks to add one mid-session."}
           </Hint>
           {w.during.map((group, g) => (
             <div key={g} className="flex flex-col pt-1">
@@ -143,6 +146,7 @@ function SetupColumn({
                     title={instanceTitle(instance)}
                     subtitle={typeLabel(instance, source, formats[instance.card] ?? "sd")}
                     summary={summarise(instance.card, instance.values)}
+                    showSummary={repeated(instance)}
                     source={source}
                     instances={[instance]}
                     veramoFormat={formats[instance.card] ?? "sd"}
@@ -158,13 +162,12 @@ function SetupColumn({
 
       {w.absent.length > 0 && (
         <div className="flex flex-col gap-1 pt-2 border-t border-[#EFEBE8]">
-          <SubHeading>Wallet must not contain</SubHeading>
+          <SubHeading>Must not be in the wallet</SubHeading>
           {[...new Set(w.absent)].map((id) => (
             <label key={id} className="flex items-center gap-2 min-h-8 text-[14px] text-[#484747]">
-              <input type="checkbox" className="w-4 h-4 accent-[#00508a]" /> No {inSentence(CARD_BY_ID[id].name)} besides the ones above
+              <input type="checkbox" className="w-4 h-4 accent-[#00508a]" /> Any other {inSentence(CARD_BY_ID[id].name)}
             </label>
           ))}
-          <Hint>This tool can't remove cards. Delete them in the app, or start with a fresh wallet.</Hint>
         </div>
       )}
     </Panel>
@@ -196,7 +199,6 @@ function OptionsBar({
   const veramo = variant === "dcql" && scenario.dcql!.source === "veramo"
   return (
     <div className="flex flex-col gap-3">
-      <SubHeading aside={<span className="text-[12.5px] text-[#6b6969]">Kept for every scenario</span>}>Session options</SubHeading>
       {irma && !isIssuance && (
         <Row label="Session type">
           <Segmented label="Session type" disabled={disabled} value={options.kind} onChange={set("kind")} options={[{ id: "disclose", label: "Disclose" }, { id: "sign", label: "Sign a message" }]} />
@@ -241,9 +243,26 @@ function OptionsBar({
           options={[{ id: "scheme", label: "Custom scheme" }, { id: "universal", label: "Universal" }, { id: "universal-staging", label: "Universal (staging)" }]}
         />
       </Row>
-      {!irma && <Hint>Signing, a pairing code and a return address are IRMA-only, so they're hidden here.</Hint>}
     </div>
   )
+}
+
+// The options in one line, for the Request column.
+function optionsSummary(variant: Variant, scenario: Scenario, options: SessionOptions, linkForm: LinkForm, formats: FormatChoice): string {
+  const irma = variant === "irma"
+  const cards = variant === "dcql" ? veramoCards(scenario) : []
+  const vcdm = cards.filter((c) => formats[c] === "vcdm").length
+  return [
+    irma && options.kind === "sign" ? "Sign" : null,
+    variant === "dcql" && scenario.dcql!.source === "veramo" ? options.prefix : null,
+    cards.length ? (vcdm === 0 ? "SD-JWT VC" : vcdm === cards.length ? "VCDM" : `${vcdm} of ${cards.length} VCDM`) : null,
+    options.device === "same" ? "This phone" : "QR",
+    irma && options.device === "qr" && options.pairing ? "Pairing code" : null,
+    irma && options.returnTo !== "none" ? `Back to ${{ website: "this page", email: "email", phone: "phone" }[options.returnTo]}` : null,
+    { scheme: "Custom scheme", universal: "Universal link", "universal-staging": "Universal link (staging)" }[linkForm],
+  ]
+    .filter(Boolean)
+    .join(" · ")
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -261,7 +280,7 @@ function FormatSwitches({ scenario, formats, onFormats, disabled }: { scenario: 
   const setAll = (v: VeramoFormat) => onFormats({ ...formats, ...Object.fromEntries(cards.map((c) => [c, v])) })
   const vcdmCount = cards.filter((c) => formats[c] === "vcdm").length
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 pt-3 border-t border-[#EFEBE8]">
       <SubHeading
         aside={
           <div className="flex gap-1">
@@ -284,9 +303,7 @@ function FormatSwitches({ scenario, formats, onFormats, disabled }: { scenario: 
           />
         </div>
       ))}
-      <Hint>
-        {vcdmCount === 0 ? "All SD-JWT VC" : vcdmCount === cards.length ? "All VCDM 2.0 SD-JWT" : `Mixed: ${vcdmCount} of ${cards.length} cards as VCDM`}. Changing a format changes what setup issues too.
-      </Hint>
+      <Hint>Setup issues the same formats{vcdmCount > 0 && vcdmCount < cards.length ? `; ${vcdmCount} of ${cards.length} as VCDM` : ""}.</Hint>
     </div>
   )
 }
@@ -344,6 +361,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const [setupTodo, setSetupTodo] = useState(0)
   const [edited, setEdited] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [optionsOpen, setOptionsOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
   const [sheetQr, setSheetQr] = useState(false)
   const [phase, setPhase] = useState<Phase>(resumed ? "running" : "ready")
@@ -435,9 +453,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const link = disclosure ? applyLinkForm(disclosure.walletLink, linkForm, hostForLinkForm(linkForm)) : ""
   const running = phase === "running"
   const statusTone = phase === "done" ? "green" : phase === "running" ? "amber" : phase === "error" ? "red" : "grey"
-  const statusLabel = { ready: "No session yet", running: "Waiting", done: "Done", error: "Failed" }[phase]
-  const endpoint = variant === "irma" ? "IRMA server" : scenario.dcql!.source === "veramo" ? `Veramo verifier (${options.prefix})` : "EUDI verifier"
-  const checkedCount = Object.values(checks).filter(Boolean).length
+  const statusLabel = { ready: "", running: "Waiting", done: "Done", error: "Failed" }[phase]
   const sameDevice = options.device === "same"
   const showSessionQr = !sameDevice || sheetQr
   const comesBack = variant === "irma" && options.returnTo === "website"
@@ -472,7 +488,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
     )
 
   return (
-    <div className="flex flex-col gap-6 xl:h-full xl:min-h-0">
+    <div className="flex flex-col gap-6 max-xl:flex-1 xl:h-full xl:min-h-0">
       <header className="flex flex-wrap gap-4 items-end justify-between shrink-0">
         <div className="flex flex-col gap-1 min-w-0 max-w-3xl">
           {onBackToList && (
@@ -484,9 +500,6 @@ export default function ScenarioPage(props: ScenarioPageProps) {
               ‹ Scenarios
             </button>
           )}
-          <span className="text-[12px] font-semibold uppercase tracking-wide text-[#6b6969]">
-            {scenario.group} · {scenario.id}
-          </span>
           <h1 className="text-2xl font-bold text-[#484747] m-0">{scenario.title}</h1>
           <p className="text-[14px] leading-[22px] text-[#5f5d5d] m-0">{scenario.description}</p>
         </div>
@@ -504,6 +517,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
         </div>
       </header>
 
+      {(scenario.unavailable.irma || scenario.unavailable.dcql || v.note) && (
       <div className="flex flex-col gap-1 shrink-0">
         {(["irma", "dcql"] as const).map((p) =>
           scenario.unavailable[p] ? (
@@ -512,13 +526,9 @@ export default function ScenarioPage(props: ScenarioPageProps) {
             </Hint>
           ) : null
         )}
-        {v.status !== "native" || v.note ? (
-          <div className="flex gap-2 items-start">
-            <Tag tone={STATUS_TONE[v.status]}>{STATUS_LABEL[v.status]}</Tag>
-            {v.note && <span className="text-[13.5px] text-[#484747]">{v.note}</span>}
-          </div>
-        ) : null}
+        {v.note && <Hint>{v.note}</Hint>}
       </div>
+      )}
 
       <div role="tablist" aria-label="Scenario parts" className="xl:hidden flex shrink-0 border-b border-[#E6E1DD] -mt-2">
         {tabs.map((t) => (
@@ -548,55 +558,54 @@ export default function ScenarioPage(props: ScenarioPageProps) {
           className={tab === "setup" ? "" : "max-xl:hidden"}
         />
 
-        <Panel
-          title="Request"
-          id="req-h"
-          className={tab === "request" ? "" : "max-xl:hidden"}
-          aside={<span className="font-mono text-[12px] text-[#6b6969]">{endpoint}</span>}
-        >
-          {setupTodo > 0 && (
-            <button
-              type="button"
-              onClick={() => setTab("setup")}
-              className="xl:hidden flex items-center justify-between gap-3 min-h-12 px-4 rounded-lg border border-[#EBD3A6] bg-[#FBEFD8] text-left text-[14.5px] text-[#484747] cursor-pointer"
-            >
-              <span>
-                <strong>{setupTodo === 1 ? "1 card" : `${setupTodo} cards`} to set up</strong> before this works
-              </span>
-              <span className="font-semibold text-[#00508a]">Set up ›</span>
-            </button>
-          )}
-          <FormatSwitches scenario={variant === "dcql" ? scenario : { ...scenario, dcql: undefined }} formats={formats} onFormats={onFormats} disabled={running} />
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-lg bg-[#F5FAFC] border border-[#CFE4EF]">
-              <div className="flex flex-col min-w-0">
-                <span className="text-[14px] font-semibold text-[#484747]">{summary.title}</span>
-                <span className="text-[13px] text-[#6b6969]">{summary.detail}</span>
-              </div>
-              <SmallButton onClick={() => setDialogOpen(true)}>Open request</SmallButton>
+        <Panel title="Request" id="req-h" className={tab === "request" ? "" : "max-xl:hidden"}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[14.5px] font-semibold text-[#484747]">{summary.title}{edited !== null ? " (edited)" : ""}</span>
+              <span className="text-[13px] text-[#6b6969]">{summary.detail}</span>
             </div>
-            <RequestDialog
-              open={dialogOpen}
-              title={`${scenario.title} · ${variant === "irma" ? "IRMA request" : "DCQL request"}`}
-              value={body}
-              onChange={setEdited}
-              onClose={() => setDialogOpen(false)}
-            />
-            <div className="flex flex-wrap gap-1">
-              {edited !== null && (
-                <SmallButton variant="ghost" disabled={running} onClick={() => setEdited(null)}>
-                  Reset to scenario
+            <SmallButton onClick={() => setDialogOpen(true)}>Open</SmallButton>
+          </div>
+          <RequestDialog
+            open={dialogOpen}
+            title={`${scenario.title} · ${variant === "irma" ? "IRMA request" : "DCQL request"}`}
+            value={body}
+            onChange={setEdited}
+            onClose={() => setDialogOpen(false)}
+            actions={
+              <>
+                {edited !== null && (
+                  <SmallButton variant="ghost" disabled={running} onClick={() => setEdited(null)}>
+                    Reset to scenario
+                  </SmallButton>
+                )}
+                <SmallButton variant="ghost" onClick={() => onOpenInPlayground(variant, body)}>
+                  Open in playground
                 </SmallButton>
-              )}
-              <SmallButton variant="ghost" onClick={() => onOpenInPlayground(variant, body)}>
-                Open in playground
-              </SmallButton>
+              </>
+            }
+          />
+          <div className="flex items-center justify-between gap-3 pt-3 border-t border-[#EFEBE8]">
+            <span className="text-[13.5px] text-[#5f5d5d] min-w-0">{optionsSummary(variant, scenario, options, linkForm, formats)}</span>
+            <SmallButton variant="ghost" disabled={running} onClick={() => setOptionsOpen(true)}>
+              Change
+            </SmallButton>
+          </div>
+          <Modal open={optionsOpen} onClose={() => setOptionsOpen(false)} labelledBy="options-title" className="w-[min(34rem,94vw)] bg-white max-md:w-full max-md:max-w-full max-md:mb-0 max-md:rounded-b-none">
+            <div className="flex flex-col gap-4 p-5 max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="options-title" className="text-lg font-bold text-[#484747] m-0">
+                  Session options
+                </h2>
+                <button type="button" className="btn-secondary py-1.5 px-4 text-sm" onClick={() => setOptionsOpen(false)}>
+                  Done
+                </button>
+              </div>
+              <OptionsBar variant={variant} scenario={scenario} options={options} onOptions={onOptions} linkForm={linkForm} onLinkForm={onLinkForm} disabled={running} />
+              <FormatSwitches scenario={variant === "dcql" ? scenario : { ...scenario, dcql: undefined }} formats={formats} onFormats={onFormats} disabled={running} />
+              <Hint>These stay the same for every scenario.</Hint>
             </div>
-            {edited !== null && <Hint>Edited: options and formats no longer change this text until you reset it.</Hint>}
-          </div>
-          <div className="pt-2 border-t border-[#EFEBE8]">
-            <OptionsBar variant={variant} scenario={scenario} options={options} onOptions={onOptions} linkForm={linkForm} onLinkForm={onLinkForm} disabled={running} />
-          </div>
+          </Modal>
           <div className="max-xl:hidden">{startControls}</div>
           <Modal
             open={running && qrOpen && !!disclosure?.walletLink}
@@ -658,7 +667,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
           </Modal>
         </Panel>
 
-        <Panel title="Result" id="res-h" className={tab === "result" ? "" : "max-xl:hidden"} aside={<Tag tone={statusTone}>{statusLabel}</Tag>}>
+        <Panel title="Result" id="res-h" className={tab === "result" ? "" : "max-xl:hidden"} aside={statusLabel ? <Tag tone={statusTone}>{statusLabel}</Tag> : undefined}>
           {phase === "error" && (
             <p role="alert" className="text-[14px] text-[#a8172f] m-0 break-words">
               {error}
@@ -683,15 +692,13 @@ export default function ScenarioPage(props: ScenarioPageProps) {
               </button>
               {showRaw && <JsonView value={result.raw} maxHeight="24rem" label="raw response" />}
             </div>
-          ) : (
-            phase !== "error" && <Hint>Disclosed attributes appear here, one table per credential.</Hint>
-          )}
+          ) : null}
           <div className="flex flex-col gap-1">
-            <SubHeading>Expected disclosure</SubHeading>
+            <SubHeading>Expected</SubHeading>
             <p className="text-[14px] leading-[21px] text-[#484747] m-0">{scenario.expected}</p>
           </div>
           <div className="flex flex-col gap-1 pt-2 border-t border-[#EFEBE8]">
-            <SubHeading aside={<span className="text-[12.5px] text-[#6b6969]">{checkedCount} of {scenario.lookFor.length}</span>}>Look for</SubHeading>
+            <SubHeading>Look for</SubHeading>
             {scenario.lookFor.map((text, i) => (
               <label key={i} className="flex gap-2 items-start min-h-8 text-[14px] leading-[21px] text-[#484747]">
                 <input
@@ -708,7 +715,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
       </div>
 
       {/* Flush with the bottom: the scroll area has no bottom padding here, or content would show through underneath. */}
-      <div className="xl:hidden sticky bottom-0 z-10 -mx-4 md:-mx-8 px-4 md:px-8 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white border-t border-[#E6E1DD] shrink-0">
+      <div className="xl:hidden mt-auto sticky bottom-0 z-10 -mx-4 md:-mx-8 px-4 md:px-8 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white border-t border-[#E6E1DD] shrink-0">
         {startControls}
       </div>
     </div>
