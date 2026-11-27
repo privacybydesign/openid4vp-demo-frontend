@@ -77,6 +77,9 @@ export default function IssueRow({
 
   const wantRevoked = instances.some((i) => i.state === "revoked")
   const wantExpired = instances.some((i) => i.state === "expired")
+  // Only Veramo issues with a short validity; IRMA validity is whole weeks, so
+  // such a card only expires by waiting or moving the phone's clock forward.
+  const expiresSoon = wantExpired && source === "veramo"
   const blocked = instances.map((i) => canIssue(source, i, veramoFormat)).find((r) => r !== null) ?? null
   const done = source === "pbdf" ? pbdfDone : wantRevoked ? state === "revoked" : state === "issued"
 
@@ -124,7 +127,7 @@ export default function IssueRow({
           if (!(await next.poll!())) return
           clearInterval(timer.current)
           setState("issued")
-          if (wantExpired) setExpiresAt(Date.now() + EXPIRES_IN_SECONDS * 1000)
+          if (expiresSoon) setExpiresAt(Date.now() + EXPIRES_IN_SECONDS * 1000)
           if (wantRevoked && next.revoke) await revoke(next)
         } catch (e) {
           fail(e)
@@ -156,7 +159,13 @@ export default function IssueRow({
           {wantRevoked && <span className="text-[13px] text-[#a8172f]">revoked after issuing</span>}
           {wantExpired && (
             <span className="text-[13px] text-[#7a5212]">
-              {secondsLeft === null ? `expires ${EXPIRES_IN_SECONDS} s after issuing` : secondsLeft > 0 ? `expires in ${secondsLeft} s` : "expired"}
+              {!expiresSoon
+                ? "to expire it, move the phone's clock past its validity"
+                : secondsLeft === null
+                  ? `expires ${EXPIRES_IN_SECONDS} s after issuing`
+                  : secondsLeft > 0
+                    ? `expires in ${secondsLeft} s`
+                    : "expired"}
             </span>
           )}
         </div>

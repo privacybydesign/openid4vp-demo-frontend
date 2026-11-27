@@ -16,6 +16,8 @@ export default function JsonEditor({ value, onChange, minHeight = "16rem" }: Jso
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
+  // Set while `value` is written into the document, so only typing reaches onChange.
+  const syncingRef = useRef(false)
 
   useEffect(() => {
     onChangeRef.current = onChange
@@ -23,7 +25,11 @@ export default function JsonEditor({ value, onChange, minHeight = "16rem" }: Jso
 
   useEffect(() => {
     const view = new EditorView({
-      state: EditorState.create({ extensions: jsonEditorExtensions((v) => onChangeRef.current(v)) }),
+      state: EditorState.create({
+        extensions: jsonEditorExtensions((v) => {
+          if (!syncingRef.current) onChangeRef.current(v)
+        }),
+      }),
       parent: hostRef.current!,
     })
     viewRef.current = view
@@ -33,7 +39,9 @@ export default function JsonEditor({ value, onChange, minHeight = "16rem" }: Jso
   useEffect(() => {
     const view = viewRef.current
     if (!view || view.state.doc.toString() === value) return
+    syncingRef.current = true
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
+    syncingRef.current = false
   }, [value])
 
   return (
