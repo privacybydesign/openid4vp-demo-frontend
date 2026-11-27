@@ -99,7 +99,7 @@ export default function App() {
         >
           <Sidebar key={route.view === "scenario" ? route.scenario : route.view} route={route} onNavigate={navigate} />
         </aside>
-        <main className={`flex-1 min-w-0 min-h-0 ${menuOpen ? "max-md:hidden" : ""} ${route.view === "playground" ? "flex flex-col px-3 py-4 md:px-6" : "flex flex-col overflow-y-auto xl:overflow-hidden px-4 py-6 md:px-8"}`}>
+        <main className={`flex-1 min-w-0 min-h-0 ${menuOpen ? "max-md:hidden" : ""} ${route.view === "playground" ? "flex flex-col px-3 py-4 md:px-6" : `flex flex-col overflow-y-auto xl:overflow-hidden px-4 py-6 md:px-8 ${route.view === "scenario" ? "max-xl:pb-0" : ""}`}`}>
           {route.view === "scenario" && scenario && (
             <ScenarioPage
               key={`${scenario.id}-${variant}`}

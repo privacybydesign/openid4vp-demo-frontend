@@ -707,7 +707,10 @@ export default function ScenarioPage(props: ScenarioPageProps) {
         </Panel>
       </div>
 
-      <div className="xl:hidden sticky bottom-0 -mx-4 md:-mx-8 -mb-6 px-4 md:px-8 py-3 bg-white border-t border-[#E6E1DD] shrink-0">{startControls}</div>
+      {/* Flush with the bottom: the scroll area has no bottom padding here, or content would show through underneath. */}
+      <div className="xl:hidden sticky bottom-0 z-10 -mx-4 md:-mx-8 px-4 md:px-8 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white border-t border-[#E6E1DD] shrink-0">
+        {startControls}
+      </div>
     </div>
   )
 }
