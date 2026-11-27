@@ -273,8 +273,8 @@ function FormatSwitches({ scenario, formats, onFormats, disabled }: { scenario: 
 
 type Phase = "ready" | "running" | "done" | "error"
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`
+function plural(n: number, word: string, many = `${word}s`): string {
+  return `${n} ${n === 1 ? word : many}`
 }
 
 // What the request asks for, in one line, so the column can stay compact and the
@@ -288,7 +288,7 @@ function summariseRequest(body: string): { title: string; detail: string } {
       const optional = sets.filter((s) => s.required === false).length
       return {
         title: "DCQL query",
-        detail: [plural(dcql.credentials?.length ?? 0, "credential query"), sets.length ? plural(sets.length, "credential set") : null, optional ? `${optional} optional` : null]
+        detail: [plural(dcql.credentials?.length ?? 0, "credential query", "credential queries"), sets.length ? plural(sets.length, "credential set") : null, optional ? `${optional} optional` : null]
           .filter(Boolean)
           .join(" · "),
       }
@@ -388,8 +388,8 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const checkedCount = Object.values(checks).filter(Boolean).length
 
   return (
-    <div className="flex flex-col gap-6">
-      <header className="flex flex-wrap gap-4 items-end justify-between">
+    <div className="flex flex-col gap-6 xl:h-full xl:min-h-0">
+      <header className="flex flex-wrap gap-4 items-end justify-between shrink-0">
         <div className="flex flex-col gap-1 min-w-0 max-w-3xl">
           <span className="text-[12px] font-semibold uppercase tracking-wide text-[#6b6969]">
             {scenario.group} · {scenario.id}
@@ -411,7 +411,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
         </div>
       </header>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 shrink-0">
         {(["irma", "dcql"] as const).map((p) =>
           scenario.unavailable[p] ? (
             <Hint key={p}>
@@ -427,7 +427,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
         ) : null}
       </div>
 
-      <div className="grid gap-6 items-start grid-cols-1 xl:grid-cols-3">
+      <div className="grid gap-6 items-start grid-cols-1 xl:grid-cols-3 xl:grid-rows-[minmax(0,1fr)] xl:items-stretch xl:flex-1 xl:min-h-0">
         <SetupColumn scenario={scenario} variant={variant} formats={formats} linkForm={linkForm} />
 
         <Panel title="Request" id="req-h" aside={<span className="font-mono text-[12px] text-[#6b6969]">{endpoint}</span>}>

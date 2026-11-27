@@ -62,7 +62,7 @@ export default function CoveragePage({ onNavigate }: { onNavigate: (r: Route) =>
   ]
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 xl:h-full xl:min-h-0">
       <h1 className="text-2xl font-bold text-[#484747] m-0">Coverage</h1>
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
@@ -73,10 +73,10 @@ export default function CoveragePage({ onNavigate }: { onNavigate: (r: Route) =>
           </div>
         ))}
       </div>
-      <div className="bg-white rounded-lg border border-[#E6E1DD] overflow-x-auto">
+      <div className="bg-white rounded-lg border border-[#E6E1DD] overflow-x-auto xl:overflow-auto xl:flex-1 xl:min-h-0">
         <table className="w-full min-w-[960px] text-[14px] border-collapse">
           <thead>
-            <tr className="text-left text-[12px] uppercase tracking-wide text-[#6b6969] bg-[#FAF8F6]">
+            <tr className="text-left text-[12px] uppercase tracking-wide text-[#6b6969] bg-[#FAF8F6] sticky top-0 z-10 shadow-[0_1px_0_#EFEBE8]">
               <th scope="col" className="px-4 py-3 font-semibold">Scenario</th>
               <th scope="col" className="px-4 py-3 font-semibold">Wallet setup</th>
               <th scope="col" className="px-4 py-3 font-semibold">IRMA</th>

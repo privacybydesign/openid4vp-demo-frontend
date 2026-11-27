@@ -23,14 +23,17 @@ export function Tag({ tone = "grey", children }: { tone?: Tone; children: ReactN
 
 export function Panel({ title, aside, children, id }: { title: string; aside?: ReactNode; children: ReactNode; id?: string }) {
   return (
-    <section aria-labelledby={id} className="bg-white rounded-lg border border-[#E6E1DD] shadow-sm p-4 flex flex-col gap-4 min-w-0">
-      <div className="flex items-center justify-between gap-2">
+    <section
+      aria-labelledby={id}
+      className="bg-white rounded-lg border border-[#E6E1DD] shadow-sm flex flex-col min-w-0 xl:min-h-0 xl:overflow-hidden"
+    >
+      <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3 shrink-0 border-b border-[#EFEBE8]">
         <h2 id={id} className="text-lg font-bold text-[#484747] m-0">
           {title}
         </h2>
         {aside}
       </div>
-      {children}
+      <div className="flex flex-col gap-4 p-4 min-h-0 xl:overflow-y-auto">{children}</div>
     </section>
   )
 }

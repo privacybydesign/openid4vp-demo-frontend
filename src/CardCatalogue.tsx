@@ -75,11 +75,11 @@ export default function CardCatalogue({ linkForm, onLinkForm }: { linkForm: Link
   const cardValues = { ...current.values, ...values[current.id] }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 xl:h-full xl:min-h-0">
       <h1 className="text-2xl font-bold text-[#484747] m-0">Card catalogue</h1>
 
-      <div className="flex flex-wrap gap-6 items-start">
-        <nav aria-label="Cards" className="flex-1 basis-72 max-w-sm min-w-0 bg-white rounded-lg border border-[#E6E1DD] p-2 flex flex-col gap-0.5 md:sticky md:top-0 md:max-h-[calc(100vh-7.5rem)] md:overflow-y-auto">
+      <div className="flex flex-wrap gap-6 items-start xl:flex-nowrap xl:flex-1 xl:min-h-0 xl:items-stretch">
+        <nav aria-label="Cards" className="flex-1 basis-72 max-w-sm min-w-0 bg-white rounded-lg border border-[#E6E1DD] p-2 flex flex-col gap-0.5 md:sticky md:top-0 md:max-h-[calc(100vh-7.5rem)] md:overflow-y-auto xl:static xl:max-h-full">
           <div className="shrink-0 px-2 pt-2 pb-3 border-b border-[#EFEBE8] mb-1">
             <Segmented<"All" | Format>
               label="Filter by format"
@@ -110,7 +110,7 @@ export default function CardCatalogue({ linkForm, onLinkForm }: { linkForm: Link
           ))}
         </nav>
 
-        <section aria-labelledby="card-h" className="flex-[999_1_520px] min-w-0 flex flex-col gap-4">
+        <section aria-labelledby="card-h" className="flex-[999_1_520px] min-w-0 flex flex-col gap-4 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
           <div className="bg-white rounded-lg border border-[#E6E1DD] p-4 flex flex-col gap-4">
             <div className="flex flex-col gap-1">
               <h2 id="card-h" className="text-xl font-bold text-[#484747] m-0">
