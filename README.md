@@ -134,6 +134,12 @@ in `src/scenarios/`; the card catalogue (`cards.ts`) maps each abstract card ont
 each source. **Coverage** (generated from that data) shows what every scenario
 can and can't do, and why.
 
+On a phone the tool works on the same device as the wallet: the scenario list
+is the first screen, a scenario opens on its Request tab (Setup shows how many
+cards are still to issue), sessions start on this phone with an Open Yivi sheet,
+and IRMA sessions return to the page. The return URL carries a resume id, so the
+result is picked up again even if the browser opens it in a new tab.
+
 All raw JSON is shown through `JsonView`, so it is always highlighted; ESLint
 rejects `JSON.stringify` inside JSX.
 

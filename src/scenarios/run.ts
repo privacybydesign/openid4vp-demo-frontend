@@ -170,6 +170,75 @@ export const DEFAULT_OPTIONS: SessionOptions = {
   prefix: "did:jwk",
 }
 
+// On a phone the wallet is on this device: start the session here, and have Yivi
+// bring you back to this page afterwards.
+export function isPhone(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 767px)").matches
+}
+
+export function defaultOptions(): SessionOptions {
+  return isPhone() ? { ...DEFAULT_OPTIONS, device: "same", returnTo: "website" } : DEFAULT_OPTIONS
+}
+
+// The page to return to after Yivi: this one, marked with a resume id so the page
+// can pick the session up again even if the browser opens it in a new tab.
+export function returnUrl(resumeId?: string): string {
+  const url = new URL(window.location.href)
+  url.searchParams.delete("resume")
+  if (resumeId) url.searchParams.set("resume", resumeId)
+  return url.toString()
+}
+
+const RESUME_PREFIX = "session-tool:resume:"
+
+export interface ResumeRecord {
+  token: string
+  scenario: string
+  variant: "irma" | "dcql"
+  at: number
+}
+
+export function saveResume(id: string, record: ResumeRecord) {
+  try {
+    localStorage.setItem(RESUME_PREFIX + id, JSON.stringify(record))
+  } catch {
+    // Without storage the page can't resume, but the session still runs.
+  }
+}
+
+// A session started on this phone, if this page load is Yivi bringing you back.
+export function takeResume(id: string | null): ResumeRecord | null {
+  if (!id) return null
+  try {
+    const raw = localStorage.getItem(RESUME_PREFIX + id)
+    if (!raw) return null
+    const record = JSON.parse(raw) as ResumeRecord
+    // Sessions expire on the server long before this, so anything older is stale.
+    return Date.now() - record.at < 30 * 60 * 1000 ? record : null
+  } catch {
+    return null
+  }
+}
+
+export function forgetResume(id: string) {
+  try {
+    localStorage.removeItem(RESUME_PREFIX + id)
+  } catch {
+    // Nothing to forget.
+  }
+}
+
+// Picks up an IRMA session's result after returning from Yivi.
+export function resumeIrma(token: string): Disclosure {
+  return {
+    walletLink: "",
+    poll: async () => {
+      const raw = await pollIrmaSession(token)
+      return raw ? { groups: parseIrmaResult(raw), raw } : null
+    },
+  }
+}
+
 const RETURN_URLS: Record<SessionOptions["returnTo"], string | undefined> = {
   none: undefined,
   website: undefined, // this page; filled in at run time
@@ -180,7 +249,13 @@ const RETURN_URLS: Record<SessionOptions["returnTo"], string | undefined> = {
 // The body this tool would POST, as text: what the request column shows and the
 // editor starts from. Everything a session option changes is in here, so what
 // you see is what is sent.
-export function requestBody(scenario: Scenario, variant: "irma" | "dcql", formats: FormatChoice, options: SessionOptions): string {
+export function requestBody(
+  scenario: Scenario,
+  variant: "irma" | "dcql",
+  formats: FormatChoice,
+  options: SessionOptions,
+  resumeId?: string
+): string {
   if (variant === "irma") {
     const irma = scenario.irma!
     const request: Record<string, unknown> = { ...(irma.request as Record<string, unknown>) }
@@ -189,8 +264,8 @@ export function requestBody(scenario: Scenario, variant: "irma" | "dcql", format
       request["@context"] = "https://irma.app/ld/request/signature/v2"
       request.message = `I agree to the terms of “${scenario.title}”.`
     }
-    const returnUrl = options.returnTo === "website" ? window.location.href : RETURN_URLS[options.returnTo]
-    if (returnUrl) request.clientReturnUrl = returnUrl
+    const clientReturnUrl = options.returnTo === "website" ? returnUrl(resumeId) : RETURN_URLS[options.returnTo]
+    if (clientReturnUrl) request.clientReturnUrl = clientReturnUrl
     if (irma.nextSession) request.nextSession = { url: `${window.location.origin}/api/irma/next-session/${irma.nextSession}` }
     return compactJson(request)
   }
@@ -208,6 +283,8 @@ export interface DisclosureResult {
 
 export interface Disclosure {
   walletLink: string
+  // IRMA's requestor token, to pick the result up again after returning from Yivi.
+  token?: string
   poll: () => Promise<DisclosureResult | null>
   // IRMA pairing: the code the frontend must check, and how to finish pairing.
   pairing?: {
@@ -247,6 +324,7 @@ async function startIrma(body: string, options: SessionOptions): Promise<Disclos
 
   return {
     walletLink: irmaWalletLink(session.sessionPtr),
+    token: session.token,
     pairing,
     poll: async () => {
       const raw = await pollIrmaSession(session.token)

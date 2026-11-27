@@ -1,6 +1,6 @@
 import type { FormatChoice, VeramoFormat } from "./scenarios/types"
 import type { SessionOptions } from "./scenarios/run"
-import { DEFAULT_OPTIONS } from "./scenarios/run"
+import { defaultOptions } from "./scenarios/run"
 import type { Variant } from "./scenarios/index"
 import { findScenario } from "./scenarios/index"
 import type { LinkForm } from "./walletLink"
@@ -29,12 +29,14 @@ export function readUrl(search = window.location.search): UrlState {
   const p = new URLSearchParams(search)
   const linkParam = p.get("link") as LinkForm | null
   const linkForm = linkParam && LINK_FORMS.includes(linkParam) ? linkParam : "scheme"
+  const defaults = defaultOptions()
+  const device = p.get("device")
   const options: SessionOptions = {
-    kind: p.get("kind") === "sign" ? "sign" : DEFAULT_OPTIONS.kind,
-    device: p.get("device") === "same" ? "same" : DEFAULT_OPTIONS.device,
+    kind: p.get("kind") === "sign" ? "sign" : defaults.kind,
+    device: device === "same" || device === "qr" ? device : defaults.device,
     pairing: p.get("pairing") === "on",
-    returnTo: (["website", "email", "phone"] as const).find((r) => r === p.get("return")) ?? DEFAULT_OPTIONS.returnTo,
-    prefix: p.get("prefix") === "did:web" ? "did:web" : DEFAULT_OPTIONS.prefix,
+    returnTo: (["none", "website", "email", "phone"] as const).find((r) => r === p.get("return")) ?? defaults.returnTo,
+    prefix: p.get("prefix") === "did:web" ? "did:web" : defaults.prefix,
   }
   const formats: FormatChoice = {}
   for (const pair of (p.get("fmt") ?? "").split(",").filter(Boolean)) {
@@ -65,11 +67,12 @@ export function writeUrl(state: UrlState, push: boolean) {
     p.set("view", state.route.view)
   }
   const o = state.options
-  if (o.kind !== DEFAULT_OPTIONS.kind) p.set("kind", o.kind)
-  if (o.device !== DEFAULT_OPTIONS.device) p.set("device", o.device)
+  const defaults = defaultOptions()
+  if (o.kind !== defaults.kind) p.set("kind", o.kind)
+  if (o.device !== defaults.device) p.set("device", o.device)
   if (o.pairing) p.set("pairing", "on")
-  if (o.returnTo !== DEFAULT_OPTIONS.returnTo) p.set("return", o.returnTo)
-  if (o.prefix !== DEFAULT_OPTIONS.prefix) p.set("prefix", o.prefix)
+  if (o.returnTo !== defaults.returnTo) p.set("return", o.returnTo)
+  if (o.prefix !== defaults.prefix) p.set("prefix", o.prefix)
   if (state.linkForm !== "scheme") p.set("link", state.linkForm)
   const url = `?${p}`
   if (url === window.location.search) return

@@ -66,7 +66,15 @@ function label(key: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
-export default function CardCatalogue({ linkForm, onLinkForm }: { linkForm: LinkForm; onLinkForm: (l: LinkForm) => void }) {
+export default function CardCatalogue({
+  linkForm,
+  onLinkForm,
+  device,
+}: {
+  linkForm: LinkForm
+  onLinkForm: (l: LinkForm) => void
+  device: "qr" | "same"
+}) {
   const [filter, setFilter] = useState<"All" | Format>("All")
   const visible = CARDS.filter((c) => filter === "All" || waysOf(c).some((w) => w.format === filter))
   const [selected, setSelected] = useState<CardId>("driving")
@@ -155,6 +163,7 @@ export default function CardCatalogue({ linkForm, onLinkForm }: { linkForm: Link
                 veramoFormat={w.veramoFormat}
                 eudiConfiguration={w.eudiConfiguration}
                 linkForm={linkForm}
+                device={device}
               />
             </div>
           ))}

@@ -4,7 +4,7 @@ import type { CardInstance, FormatChoice, Scenario, VeramoFormat } from "./scena
 import type { Variant } from "./scenarios/index"
 import { instanceSource, veramoCards, walletFor } from "./scenarios/index"
 import { CARD_BY_ID, inSentence, summarise, veramoConfigurationId } from "./scenarios/cards"
-import { requestBody, startDisclosure } from "./scenarios/run"
+import { forgetResume, requestBody, resumeIrma, saveResume, startDisclosure, takeResume } from "./scenarios/run"
 import type { Disclosure, DisclosureResult, SessionOptions } from "./scenarios/run"
 import IssueRow from "./IssueRow"
 import JsonView from "./JsonView"
@@ -29,6 +29,8 @@ interface ScenarioPageProps {
   linkForm: LinkForm
   onLinkForm: (l: LinkForm) => void
   onOpenInPlayground: (variant: Variant, body: string) => void
+  // Phones: back to the scenario list, which is a screen of its own there.
+  onBackToList?: () => void
 }
 
 function instanceTitle(instance: CardInstance): string {
@@ -50,11 +52,17 @@ function SetupColumn({
   variant,
   formats,
   linkForm,
+  device,
+  onProgress,
+  className,
 }: {
   scenario: Scenario
   variant: Variant
   formats: FormatChoice
   linkForm: LinkForm
+  device: "qr" | "same"
+  onProgress: (todo: number) => void
+  className?: string
 }) {
   const w = walletFor(scenario, variant)
   const sourceOf = (i: CardInstance) => (variant === "irma" ? "irma" : instanceSource(scenario.dcql!, i))
@@ -62,6 +70,13 @@ function SetupColumn({
   const report = (key: string) => (d: boolean) => setDone((prev) => (prev[key] === d ? prev : { ...prev, [key]: d }))
   const beforeKeys = w.before.map((_, i) => `b${i}`)
   const ready = beforeKeys.filter((k) => done[k]).length
+  const onProgressRef = useRef(onProgress)
+  useEffect(() => {
+    onProgressRef.current = onProgress
+  })
+  useEffect(() => {
+    onProgressRef.current(w.before.length - ready)
+  }, [ready, w.before.length])
   // One IRMA session can issue every plain "Before" card at once; revoked or
   // expiring ones keep their own rows, since they need a follow-up step each.
   const bulk = variant === "irma" ? w.before.filter((i) => !i.state) : []
@@ -71,6 +86,7 @@ function SetupColumn({
     <Panel
       title="Wallet setup"
       id="setup-h"
+      className={className}
       aside={<Tag tone={ready === w.before.length ? "green" : "amber"}>{w.before.length ? `${ready} of ${w.before.length} ready` : "Nothing up front"}</Tag>}
     >
       <div className="flex flex-col gap-1">
@@ -84,6 +100,7 @@ function SetupColumn({
             source="irma"
             instances={bulk}
             linkForm={linkForm}
+            device={device}
             buttonLabel="Issue all"
           />
         )}
@@ -100,6 +117,7 @@ function SetupColumn({
               instances={[instance]}
               veramoFormat={format}
               linkForm={linkForm}
+              device={device}
               onDone={report(`b${i}`)}
             />
           )
@@ -129,6 +147,7 @@ function SetupColumn({
                     instances={[instance]}
                     veramoFormat={formats[instance.card] ?? "sd"}
                     linkForm={linkForm}
+                    device={device}
                   />
                 )
               })}
@@ -310,12 +329,24 @@ function summariseRequest(body: string): { title: string; detail: string } {
 // --- page -------------------------------------------------------------------------
 
 export default function ScenarioPage(props: ScenarioPageProps) {
-  const { scenario, variant, onVariant, formats, onFormats, options, onOptions, linkForm, onLinkForm, onOpenInPlayground } = props
-  const generated = useMemo(() => requestBody(scenario, variant, formats, options), [scenario, variant, formats, options])
+  const { scenario, variant, onVariant, formats, onFormats, options, onOptions, linkForm, onLinkForm, onOpenInPlayground, onBackToList } = props
+  // Marks this page in the return URL, so returning from Yivi (even in a new tab)
+  // picks the session up again. A page that is itself such a return keeps its id.
+  const [resumeId] = useState(() => new URLSearchParams(window.location.search).get("resume") ?? Math.random().toString(36).slice(2, 10))
+  const [resumed] = useState(() => {
+    const record = takeResume(new URLSearchParams(window.location.search).get("resume"))
+    return record && record.scenario === scenario.id && record.variant === variant ? record : null
+  })
+  const generated = useMemo(() => requestBody(scenario, variant, formats, options, resumeId), [scenario, variant, formats, options, resumeId])
+  // Below xl the three panels become tabs; Request comes first, since setup is
+  // done once and the request every run.
+  const [tab, setTab] = useState<"request" | "setup" | "result">(resumed ? "result" : "request")
+  const [setupTodo, setSetupTodo] = useState(0)
   const [edited, setEdited] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
-  const [phase, setPhase] = useState<Phase>("ready")
+  const [sheetQr, setSheetQr] = useState(false)
+  const [phase, setPhase] = useState<Phase>(resumed ? "running" : "ready")
   const [disclosure, setDisclosure] = useState<Disclosure | null>(null)
   const [result, setResult] = useState<DisclosureResult | null>(null)
   const [error, setError] = useState("")
@@ -332,6 +363,35 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const stop = () => clearInterval(timer.current)
   useEffect(() => stop, [])
 
+  const follow = (d: Disclosure) => {
+    stop()
+    timer.current = setInterval(async () => {
+      try {
+        if (d.pairing && (await d.pairing.isPairing())) setIsPairing(true)
+        const r = await d.poll()
+        if (r) {
+          stop()
+          forgetResume(resumeId)
+          setResult(r)
+          setPhase("done")
+          setQrOpen(false)
+          setTab("result")
+        }
+      } catch (e) {
+        stop()
+        setError(e instanceof Error ? e.message : String(e))
+        setPhase("error")
+      }
+    }, 700)
+  }
+
+  // Back from Yivi with a session this phone started: fetch its result.
+  useEffect(() => {
+    if (resumed) follow(resumeIrma(resumed.token))
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const start = async () => {
     setError("")
     setResult(null)
@@ -346,25 +406,14 @@ export default function ScenarioPage(props: ScenarioPageProps) {
     }
     try {
       const d = await startDisclosure(scenario, variant, body, options)
+      if (d.token && body.includes(`resume=${resumeId}`)) {
+        saveResume(resumeId, { token: d.token, scenario: scenario.id, variant, at: Date.now() })
+      }
       setDisclosure(d)
       setPhase("running")
+      setSheetQr(false)
       setQrOpen(true)
-      stop()
-      timer.current = setInterval(async () => {
-        try {
-          if (d.pairing && (await d.pairing.isPairing())) setIsPairing(true)
-          const r = await d.poll()
-          if (r) {
-            stop()
-            setResult(r)
-            setPhase("done")
-          }
-        } catch (e) {
-          stop()
-          setError(e instanceof Error ? e.message : String(e))
-          setPhase("error")
-        }
-      }, 700)
+      follow(d)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setPhase("error")
@@ -389,11 +438,52 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const statusLabel = { ready: "No session yet", running: "Waiting", done: "Done", error: "Failed" }[phase]
   const endpoint = variant === "irma" ? "IRMA server" : scenario.dcql!.source === "veramo" ? `Veramo verifier (${options.prefix})` : "EUDI verifier"
   const checkedCount = Object.values(checks).filter(Boolean).length
+  const sameDevice = options.device === "same"
+  const showSessionQr = !sameDevice || sheetQr
+  const comesBack = variant === "irma" && options.returnTo === "website"
+  const continueText =
+    variant === "dcql"
+      ? "The session is ready on this phone. Yivi opens and asks what to share. This verifier can’t send you back: switch back to this page when Yivi is done."
+      : comesBack
+        ? "The session is ready on this phone. Yivi opens, asks what to share, and brings you back to this page when you’re done."
+        : "The session is ready on this phone. Yivi opens and asks what to share; switch back to this page when you’re done."
+  const tabs: { id: "request" | "setup" | "result"; label: string }[] = [
+    { id: "request", label: "Request" },
+    { id: "setup", label: setupTodo > 0 ? `Setup · ${setupTodo}` : "Setup" },
+    { id: "result", label: "Result" },
+  ]
+  const startControls =
+    phase !== "running" ? (
+      <button type="button" className="btn-primary w-full" onClick={start}>
+        {phase === "ready" ? "Start session" : "Start again"}
+      </button>
+    ) : (
+      <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-lg bg-[#FBEFD8] border border-[#EBD3A6]">
+        <span className="text-[14px] font-semibold text-[#484747]">{disclosure?.walletLink ? "Session running" : "Waiting for the result…"}</span>
+        <div className="flex gap-1">
+          {disclosure?.walletLink && (
+            <SmallButton onClick={() => setQrOpen(true)}>{sameDevice ? "Open Yivi" : "Show QR"}</SmallButton>
+          )}
+          <SmallButton variant="ghost" onClick={cancel}>
+            Cancel
+          </SmallButton>
+        </div>
+      </div>
+    )
 
   return (
     <div className="flex flex-col gap-6 xl:h-full xl:min-h-0">
       <header className="flex flex-wrap gap-4 items-end justify-between shrink-0">
         <div className="flex flex-col gap-1 min-w-0 max-w-3xl">
+          {onBackToList && (
+            <button
+              type="button"
+              onClick={onBackToList}
+              className="md:hidden self-start min-h-10 p-0 bg-transparent border-0 text-[15px] font-semibold text-[#00508a] cursor-pointer"
+            >
+              ‹ Scenarios
+            </button>
+          )}
           <span className="text-[12px] font-semibold uppercase tracking-wide text-[#6b6969]">
             {scenario.group} · {scenario.id}
           </span>
@@ -430,10 +520,52 @@ export default function ScenarioPage(props: ScenarioPageProps) {
         ) : null}
       </div>
 
-      <div className="grid gap-6 items-start grid-cols-1 xl:grid-cols-3 xl:grid-rows-[minmax(0,1fr)] xl:items-stretch xl:flex-1 xl:min-h-0">
-        <SetupColumn scenario={scenario} variant={variant} formats={formats} linkForm={linkForm} />
+      <div role="tablist" aria-label="Scenario parts" className="xl:hidden flex shrink-0 border-b border-[#E6E1DD] -mt-2">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex-1 min-h-11 px-2 bg-transparent border-0 border-b-[3px] text-[14.5px] font-semibold cursor-pointer ${
+              tab === t.id ? "border-[#E12747] text-[#484747]" : "border-transparent text-[#6b6969]"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-        <Panel title="Request" id="req-h" aside={<span className="font-mono text-[12px] text-[#6b6969]">{endpoint}</span>}>
+      <div className="grid gap-6 items-start grid-cols-1 xl:grid-cols-3 xl:grid-rows-[minmax(0,1fr)] xl:items-stretch xl:flex-1 xl:min-h-0">
+        <SetupColumn
+          scenario={scenario}
+          variant={variant}
+          formats={formats}
+          linkForm={linkForm}
+          device={options.device}
+          onProgress={setSetupTodo}
+          className={tab === "setup" ? "" : "max-xl:hidden"}
+        />
+
+        <Panel
+          title="Request"
+          id="req-h"
+          className={tab === "request" ? "" : "max-xl:hidden"}
+          aside={<span className="font-mono text-[12px] text-[#6b6969]">{endpoint}</span>}
+        >
+          {setupTodo > 0 && (
+            <button
+              type="button"
+              onClick={() => setTab("setup")}
+              className="xl:hidden flex items-center justify-between gap-3 min-h-12 px-4 rounded-lg border border-[#EBD3A6] bg-[#FBEFD8] text-left text-[14.5px] text-[#484747] cursor-pointer"
+            >
+              <span>
+                <strong>{setupTodo === 1 ? "1 card" : `${setupTodo} cards`} to set up</strong> before this works
+              </span>
+              <span className="font-semibold text-[#00508a]">Set up ›</span>
+            </button>
+          )}
           <FormatSwitches scenario={variant === "dcql" ? scenario : { ...scenario, dcql: undefined }} formats={formats} onFormats={onFormats} disabled={running} />
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-lg bg-[#F5FAFC] border border-[#CFE4EF]">
@@ -465,32 +597,25 @@ export default function ScenarioPage(props: ScenarioPageProps) {
           <div className="pt-2 border-t border-[#EFEBE8]">
             <OptionsBar variant={variant} scenario={scenario} options={options} onOptions={onOptions} linkForm={linkForm} onLinkForm={onLinkForm} disabled={running} />
           </div>
-          {phase !== "running" ? (
-            <button type="button" className="btn-primary w-full" onClick={start}>
-              {phase === "ready" ? "Start session" : "Start again"}
-            </button>
-          ) : (
-            <div className="flex items-center justify-between gap-3 flex-wrap p-3 rounded-lg bg-[#FBEFD8] border border-[#EBD3A6]">
-              <span className="text-[14px] font-semibold text-[#484747]">Session running</span>
-              <div className="flex gap-1">
-                <SmallButton onClick={() => setQrOpen(true)}>Show QR</SmallButton>
-                <SmallButton variant="ghost" onClick={cancel}>
-                  Cancel
-                </SmallButton>
-              </div>
-            </div>
-          )}
-          <Modal open={running && qrOpen} onClose={() => setQrOpen(false)} labelledBy="session-dialog-title" className="w-[min(30rem,94vw)] bg-white">
+          <div className="max-xl:hidden">{startControls}</div>
+          <Modal
+            open={running && qrOpen && !!disclosure?.walletLink}
+            onClose={() => setQrOpen(false)}
+            labelledBy="session-dialog-title"
+            className="w-[min(30rem,94vw)] bg-white max-md:w-full max-md:max-w-full max-md:mb-0 max-md:rounded-b-none"
+          >
             <div className="flex flex-col items-center gap-4 p-6">
               <h2 id="session-dialog-title" className="text-lg font-bold text-[#484747] m-0 text-center">
-                {scenario.title}
+                {sameDevice ? "Continue in Yivi" : scenario.title}
               </h2>
-              {options.device === "qr" ? (
-                <QRCodeComponent text={stampSecondDeviceForQr(link)} size={320} />
-              ) : (
-                <Hint>Started on this phone: open the wallet with the button.</Hint>
+              {sameDevice && <p className="text-[14.5px] leading-[22px] text-[#484747] m-0 text-center">{continueText}</p>}
+              {sameDevice && (
+                <a href={link} className="btn-primary no-underline w-full text-center text-[17px]">
+                  Open Yivi
+                </a>
               )}
-              <span className="font-semibold text-[#484747]">Waiting for the wallet…</span>
+              {showSessionQr && <QRCodeComponent text={stampSecondDeviceForQr(link)} size={sameDevice ? 240 : 320} />}
+              {!sameDevice && <span className="font-semibold text-[#484747]">Waiting for the wallet…</span>}
               {isPairing && (
                 <div className="flex flex-col gap-2 w-full">
                   <label htmlFor="pairing-code" className="text-[13.5px] text-[#484747]">
@@ -512,9 +637,15 @@ export default function ScenarioPage(props: ScenarioPageProps) {
                 </div>
               )}
               <div className="flex gap-2 flex-wrap justify-center">
-                <a href={link} className="btn-primary no-underline">
-                  Open Yivi
-                </a>
+                {sameDevice ? (
+                  <button type="button" className="btn-secondary" onClick={() => setSheetQr((q) => !q)}>
+                    {sheetQr ? "Hide QR" : "Show QR instead"}
+                  </button>
+                ) : (
+                  <a href={link} className="btn-primary no-underline">
+                    Open Yivi
+                  </a>
+                )}
                 <button type="button" className="btn-secondary" onClick={() => setQrOpen(false)}>
                   Hide
                 </button>
@@ -527,7 +658,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
           </Modal>
         </Panel>
 
-        <Panel title="Result" id="res-h" aside={<Tag tone={statusTone}>{statusLabel}</Tag>}>
+        <Panel title="Result" id="res-h" className={tab === "result" ? "" : "max-xl:hidden"} aside={<Tag tone={statusTone}>{statusLabel}</Tag>}>
           {phase === "error" && (
             <p role="alert" className="text-[14px] text-[#a8172f] m-0 break-words">
               {error}
@@ -575,6 +706,8 @@ export default function ScenarioPage(props: ScenarioPageProps) {
           </div>
         </Panel>
       </div>
+
+      <div className="xl:hidden sticky bottom-0 -mx-4 md:-mx-8 -mb-6 px-4 md:px-8 py-3 bg-white border-t border-[#E6E1DD] shrink-0">{startControls}</div>
     </div>
   )
 }

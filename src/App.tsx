@@ -11,6 +11,7 @@ import type { Variant } from "./scenarios/index"
 import type { FormatChoice } from "./scenarios/types"
 import type { SessionOptions } from "./scenarios/run"
 import { readUrl, writeUrl } from "./route"
+import { isPhone } from "./scenarios/run"
 import type { Route } from "./route"
 import type { LinkForm } from "./walletLink"
 
@@ -28,7 +29,8 @@ export default function App() {
   // Bumped to remount the Playground when a scenario hands it a request, so it
   // re-reads its state from the URL.
   const [playgroundKey, setPlaygroundKey] = useState(0)
-  const [menuOpen, setMenuOpen] = useState(false)
+  // On a phone the scenario list is a screen of its own, and where the tool opens.
+  const [menuOpen, setMenuOpen] = useState(() => isPhone() && initial.route.view !== "scenario")
 
   const scenario = route.view === "scenario" ? findScenario(route.scenario) : undefined
   const variant: Variant = scenario
@@ -93,11 +95,11 @@ export default function App() {
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
         <aside
           id="scenario-sidebar"
-          className={`${menuOpen ? "block" : "hidden"} md:block md:w-80 shrink-0 bg-white border-b md:border-b-0 md:border-r border-[#E6E1DD] overflow-y-auto max-h-[60vh] md:max-h-none`}
+          className={`${menuOpen ? "block max-md:flex-1" : "hidden"} md:block md:w-80 shrink-0 bg-white md:border-r border-[#E6E1DD] overflow-y-auto`}
         >
           <Sidebar key={route.view === "scenario" ? route.scenario : route.view} route={route} onNavigate={navigate} />
         </aside>
-        <main className={`flex-1 min-w-0 min-h-0 ${route.view === "playground" ? "flex flex-col px-3 py-4 md:px-6" : "flex flex-col overflow-y-auto xl:overflow-hidden px-4 py-6 md:px-8"}`}>
+        <main className={`flex-1 min-w-0 min-h-0 ${menuOpen ? "max-md:hidden" : ""} ${route.view === "playground" ? "flex flex-col px-3 py-4 md:px-6" : "flex flex-col overflow-y-auto xl:overflow-hidden px-4 py-6 md:px-8"}`}>
           {route.view === "scenario" && scenario && (
             <ScenarioPage
               key={`${scenario.id}-${variant}`}
@@ -111,10 +113,11 @@ export default function App() {
               linkForm={linkForm}
               onLinkForm={setLinkForm}
               onOpenInPlayground={openInPlayground}
+              onBackToList={() => setMenuOpen(true)}
             />
           )}
           {route.view === "coverage" && <CoveragePage onNavigate={navigate} />}
-          {route.view === "cards" && <CardCatalogue linkForm={linkForm} onLinkForm={setLinkForm} />}
+          {route.view === "cards" && <CardCatalogue linkForm={linkForm} onLinkForm={setLinkForm} device={options.device} />}
           {route.view === "playground" && <Playground key={playgroundKey} />}
         </main>
       </div>

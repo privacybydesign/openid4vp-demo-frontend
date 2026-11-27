@@ -21,6 +21,9 @@ interface IssueRowProps {
   veramoFormat?: VeramoFormat
   eudiConfiguration?: number
   linkForm: LinkForm
+  // "same": the wallet is on this device, so lead with Open Yivi and keep the QR
+  // one tap away.
+  device?: "qr" | "same"
   // Reports whether this row has done its part, for the setup column's count.
   onDone?: (done: boolean) => void
   // A "Before" row is expected to be issued; a "During" row only when asked.
@@ -50,9 +53,11 @@ export default function IssueRow({
   veramoFormat,
   eudiConfiguration,
   linkForm,
+  device = "qr",
   onDone,
   buttonLabel = "Issue",
 }: IssueRowProps) {
+  const [showQr, setShowQr] = useState(device === "qr")
   const [state, setState] = useState<RowState>("idle")
   const [error, setError] = useState("")
   const [issuance, setIssuance] = useState<Issuance | null>(null)
@@ -190,9 +195,14 @@ export default function IssueRow({
 
       {open && issuance && (
         <div className="flex flex-wrap items-center gap-4 p-3 rounded-lg bg-[#F5FAFC] border border-[#CFE4EF]">
-          <QRCodeComponent text={stampSecondDeviceForQr(link)} size={168} />
+          {showQr && <QRCodeComponent text={stampSecondDeviceForQr(link)} size={168} />}
           <div className="flex flex-col gap-2 min-w-[10rem] flex-1">
-            <span className="font-semibold text-[#484747]">{state === "confirm" ? "Scan, then confirm" : "Waiting for the wallet…"}</span>
+            <span className="font-semibold text-[#484747]">
+              {state === "confirm" ? (showQr ? "Scan, then confirm" : "Add it in Yivi, then confirm") : showQr ? "Waiting for the wallet…" : "Open Yivi to add this card"}
+            </span>
+            {!showQr && state === "waiting" && (
+              <span className="text-[13px] text-[#6b6969]">Come back here when it’s added; this row updates by itself.</span>
+            )}
             {state === "confirm" && (
               <span className="text-[13px] text-[#6b6969]">This issuer can't be asked whether the wallet collected it, so confirm it yourself.</span>
             )}
@@ -202,9 +212,17 @@ export default function IssueRow({
               </span>
             )}
             <div className="flex flex-wrap gap-2">
-              <a href={link} className="min-h-9 inline-flex items-center px-3 rounded-md border border-[#484747] text-[13.5px] font-semibold text-[#484747] no-underline hover:bg-[#eae5e2]">
+              <a
+                href={link}
+                className={`min-h-10 inline-flex items-center px-3 rounded-md border text-[13.5px] font-semibold no-underline ${
+                  showQr ? "border-[#484747] text-[#484747] hover:bg-[#eae5e2]" : "border-[#E12747] bg-[#E12747] text-white"
+                }`}
+              >
                 Open Yivi
               </a>
+              <SmallButton variant="ghost" onClick={() => setShowQr((s) => !s)}>
+                {showQr ? "Hide QR" : "Show QR instead"}
+              </SmallButton>
               {state === "confirm" && (
                 <SmallButton variant="primary" onClick={() => setState("issued")}>
                   The wallet has it
