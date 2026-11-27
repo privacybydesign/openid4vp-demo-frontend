@@ -55,7 +55,8 @@ export async function requestViaDcApi(data: object): Promise<DcApiResponse> {
         : name === "NotAllowedError" || name === "AbortError"
           ? " The request was cancelled or not allowed."
           : ""
-    throw new Error(`${name ? `${name}: ` : ""}${e instanceof Error ? e.message : String(e)}.${hint}`)
+    const message = (e instanceof Error ? e.message : String(e)).replace(/\.$/, "")
+    throw new Error(`${name ? `${name}: ` : ""}${message}.${hint}`, { cause: e })
   }
   if (!result) throw new Error("The wallet returned no credential")
   const raw = (result as unknown as { data: unknown }).data
