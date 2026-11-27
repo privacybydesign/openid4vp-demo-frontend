@@ -41,8 +41,22 @@ export async function requestViaDcApi(data: object): Promise<DcApiResponse> {
     throw new Error("This browser has no Digital Credentials API. Use Chrome on Android (or a desktop paired with one), over HTTPS or localhost.")
   }
   const options = { digital: { requests: [{ protocol: DC_API_PROTOCOL, data }] } }
-  // The Digital Credentials API is not in TypeScript's DOM types yet.
-  const result = await navigator.credentials.get(options as CredentialRequestOptions)
+  let result: Credential | null
+  try {
+    // The Digital Credentials API is not in TypeScript's DOM types yet.
+    result = await navigator.credentials.get(options as CredentialRequestOptions)
+  } catch (e) {
+    // Chrome's messages are generic ("Error retrieving a token"); the name tells
+    // a refused or unmatched request (NetworkError) from a cancel (NotAllowedError, AbortError).
+    const name = e instanceof DOMException ? e.name : ""
+    const hint =
+      name === "NetworkError"
+        ? " The wallet returned an error, or no wallet has a credential that matches the query."
+        : name === "NotAllowedError" || name === "AbortError"
+          ? " The request was cancelled or not allowed."
+          : ""
+    throw new Error(`${name ? `${name}: ` : ""}${e instanceof Error ? e.message : String(e)}.${hint}`)
+  }
   if (!result) throw new Error("The wallet returned no credential")
   const raw = (result as unknown as { data: unknown }).data
   const response = (typeof raw === "string" ? JSON.parse(raw) : raw) as DcApiResponse
