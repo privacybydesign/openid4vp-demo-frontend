@@ -35,7 +35,7 @@ export function readUrl(search = window.location.search): UrlState {
     kind: p.get("kind") === "sign" ? "sign" : defaults.kind,
     device: device === "same" || device === "qr" ? device : defaults.device,
     pairing: p.get("pairing") === "on",
-    returnTo: (["none", "website", "email", "phone"] as const).find((r) => r === p.get("return")) ?? defaults.returnTo,
+    returnTo: (["none", "website", "inapp", "email", "phone"] as const).find((r) => r === p.get("return")) ?? defaults.returnTo,
     prefix: p.get("prefix") === "did:web" ? "did:web" : defaults.prefix,
   }
   const formats: FormatChoice = {}

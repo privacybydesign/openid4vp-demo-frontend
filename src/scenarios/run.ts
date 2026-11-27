@@ -161,7 +161,8 @@ export interface SessionOptions {
   kind: "disclose" | "sign"
   device: "qr" | "same"
   pairing: boolean
-  returnTo: "none" | "website" | "email" | "phone"
+  // "inapp": this page, opened in Yivi's own browser instead of the normal one.
+  returnTo: "none" | "website" | "inapp" | "email" | "phone"
   prefix: "did:jwk" | "did:web"
 }
 
@@ -183,51 +184,50 @@ export function defaultOptions(): SessionOptions {
   return isPhone() ? { ...DEFAULT_OPTIONS, device: "same", returnTo: "website" } : DEFAULT_OPTIONS
 }
 
-// The page to return to after Yivi: this one, marked with a resume id so the page
-// can pick the session up again even if the browser opens it in a new tab.
-export function returnUrl(resumeId?: string): string {
-  const url = new URL(window.location.href)
-  url.searchParams.delete("resume")
-  if (resumeId) url.searchParams.set("resume", resumeId)
-  return url.toString()
+// A fresh id for this page's return URL. It unlocks a stored session token, so
+// it is long and random.
+export function newResumeId(): string {
+  // getRandomValues, not randomUUID: that one needs HTTPS, and a phone may reach
+  // the dev server over plain HTTP on the LAN.
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("")
 }
 
-const RESUME_PREFIX = "session-tool:resume:"
+// The page to return to after Yivi: this one, marked with a resume id so the page
+// can pick the session up again in whatever browser Yivi opens it. `inapp` makes
+// the app open it in its own browser.
+export function returnUrl(resumeId?: string, inApp = false): string {
+  const url = new URL(window.location.href)
+  url.searchParams.delete("resume")
+  url.searchParams.delete("inapp")
+  if (resumeId) url.searchParams.set("resume", resumeId)
+  if (inApp) url.searchParams.set("inapp", "")
+  return url.toString()
+}
 
 export interface ResumeRecord {
   token: string
   scenario: string
   variant: "irma" | "dcql"
-  at: number
 }
 
-export function saveResume(id: string, record: ResumeRecord) {
+// Kept on the tool's server rather than in this browser: Yivi may open the
+// return URL in another browser, or its in-app one, which can't see our storage.
+export async function saveResume(id: string, record: ResumeRecord): Promise<void> {
   try {
-    localStorage.setItem(RESUME_PREFIX + id, JSON.stringify(record))
+    await fetch(`/api/resume/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(record) })
   } catch {
-    // Without storage the page can't resume, but the session still runs.
+    // Without it the page can't resume, but the session still runs.
   }
 }
 
-// A session started on this phone, if this page load is Yivi bringing you back.
-export function takeResume(id: string | null): ResumeRecord | null {
-  if (!id) return null
+// The session this page started before Yivi brought you back, if any. Read once.
+export async function takeResume(id: string | null): Promise<ResumeRecord | null> {
+  if (!id || !/^[a-z0-9]{24,64}$/.test(id)) return null
   try {
-    const raw = localStorage.getItem(RESUME_PREFIX + id)
-    if (!raw) return null
-    const record = JSON.parse(raw) as ResumeRecord
-    // Sessions expire on the server long before this, so anything older is stale.
-    return Date.now() - record.at < 30 * 60 * 1000 ? record : null
+    const r = await fetch(`/api/resume/${id}`)
+    return r.ok ? ((await r.json()) as ResumeRecord) : null
   } catch {
     return null
-  }
-}
-
-export function forgetResume(id: string) {
-  try {
-    localStorage.removeItem(RESUME_PREFIX + id)
-  } catch {
-    // Nothing to forget.
   }
 }
 
@@ -242,11 +242,23 @@ export function resumeIrma(token: string): Disclosure {
   }
 }
 
-const RETURN_URLS: Record<SessionOptions["returnTo"], string | undefined> = {
-  none: undefined,
-  website: undefined, // this page; filled in at run time
-  email: "mailto:demo@example.org",
-  phone: "tel:+31201234567",
+// The return URL a session gets. The app only follows one on the device the
+// session runs on, except tel:, which it offers on any device; so a QR session
+// only gets a phone number.
+export function clientReturnUrl(options: SessionOptions, resumeId?: string): string | undefined {
+  if (options.device === "qr" && options.returnTo !== "phone") return undefined
+  switch (options.returnTo) {
+    case "website":
+      return returnUrl(resumeId)
+    case "inapp":
+      return returnUrl(resumeId, true)
+    case "email":
+      return "mailto:demo@example.org"
+    case "phone":
+      return "tel:+31201234567"
+    default:
+      return undefined
+  }
 }
 
 // The body this tool would POST, as text: what the request column shows and the
@@ -267,9 +279,14 @@ export function requestBody(
       request["@context"] = "https://irma.app/ld/request/signature/v2"
       request.message = `I agree to the terms of “${scenario.title}”.`
     }
-    const clientReturnUrl = options.returnTo === "website" ? returnUrl(resumeId) : RETURN_URLS[options.returnTo]
-    if (clientReturnUrl) request.clientReturnUrl = clientReturnUrl
-    if (irma.nextSession) request.nextSession = { url: `${window.location.origin}/api/irma/next-session/${irma.nextSession}` }
+    const back = clientReturnUrl(options, resumeId)
+    if (back) request.clientReturnUrl = back
+    if (irma.nextSession) {
+      // The next session is built by the tool's server; it gets the same return URL.
+      const next = new URL(`/api/irma/next-session/${irma.nextSession}`, window.location.origin)
+      if (back) next.searchParams.set("return", back)
+      request.nextSession = { url: next.toString() }
+    }
     return compactJson(request)
   }
   const dcql = scenario.dcql!

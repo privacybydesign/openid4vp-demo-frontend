@@ -175,13 +175,62 @@ export function mountApiProxy(app, config) {
     },
   }
 
+  // The IRMA server POSTs here for the next session of a chain. The first
+  // session's clientReturnUrl comes along as ?return=, so the app still brings
+  // the person back after the last session. Only schemes a demo would return to.
   app.post("/api/irma/next-session/:name", express.json({ limit: "256kb" }), (req, res) => {
     const next = nextSessions[req.params.name]
     if (!next) {
       res.status(404).json({ error: "unknown_next_session" })
       return
     }
-    res.json(next)
+    const back = typeof req.query.return === "string" ? req.query.return : ""
+    const allowed = /^(https?:|mailto:|tel:)/i.test(back) && back.length <= 2048
+    res.json(allowed ? { ...next, clientReturnUrl: back } : next)
+  })
+
+  // --- Resume after Yivi -----------------------------------------------------
+  // A phone that starts an IRMA session stores its requestor token here under a
+  // random id that is also in the return URL. Yivi may open that URL in another
+  // browser (or its own in-app one) without this page's storage, so the record
+  // lives on the server. In memory: one replica, and sessions last minutes.
+  const resumes = new Map()
+  const RESUME_TTL_MS = 30 * 60 * 1000
+  const RESUME_MAX = 1000
+  const validResumeId = (id) => /^[a-z0-9]{24,64}$/.test(id)
+  const pruneResumes = () => {
+    const now = Date.now()
+    for (const [id, r] of resumes) if (now - r.at > RESUME_TTL_MS) resumes.delete(id)
+    while (resumes.size >= RESUME_MAX) resumes.delete(resumes.keys().next().value)
+  }
+
+  app.put("/api/resume/:id", express.json({ limit: "4kb" }), (req, res) => {
+    const { id } = req.params
+    const { token, scenario, variant } = req.body ?? {}
+    const ok =
+      validResumeId(id) &&
+      typeof token === "string" && /^[A-Za-z0-9]{1,64}$/.test(token) &&
+      typeof scenario === "string" && scenario.length <= 64 &&
+      (variant === "irma" || variant === "dcql")
+    if (!ok) {
+      res.status(400).json({ error: "invalid_resume" })
+      return
+    }
+    pruneResumes()
+    resumes.set(id, { token, scenario, variant, at: Date.now() })
+    res.status(204).end()
+  })
+
+  // Read once: the page that comes back takes the record and follows the session.
+  app.get("/api/resume/:id", (req, res) => {
+    const { id } = req.params
+    const record = validResumeId(id) ? resumes.get(id) : undefined
+    if (!record || Date.now() - record.at > RESUME_TTL_MS) {
+      res.status(404).json({ error: "unknown_resume" })
+      return
+    }
+    resumes.delete(id)
+    res.json(record)
   })
 
   // --- EUDI issuer ----------------------------------------------------------

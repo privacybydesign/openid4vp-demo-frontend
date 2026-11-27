@@ -4,7 +4,7 @@ import type { CardInstance, FormatChoice, Scenario, VeramoFormat } from "./scena
 import type { Variant } from "./scenarios/index"
 import { instanceSource, veramoCards, walletFor } from "./scenarios/index"
 import { CARD_BY_ID, inSentence, summarise, veramoConfigurationId } from "./scenarios/cards"
-import { forgetResume, requestBody, resumeIrma, saveResume, startDisclosure, takeResume } from "./scenarios/run"
+import { newResumeId, requestBody, resumeIrma, saveResume, startDisclosure, takeResume } from "./scenarios/run"
 import type { Disclosure, DisclosureResult, SessionOptions } from "./scenarios/run"
 import IssueRow from "./IssueRow"
 import JsonView from "./JsonView"
@@ -225,12 +225,23 @@ function OptionsBar({
       )}
       {irma && (
         <Row label="Afterwards return to">
+          {/* With a QR the app only offers to call a tel: return URL; it ignores the rest on another device. */}
           <Segmented
             label="Afterwards return to"
             disabled={disabled}
-            value={options.returnTo}
+            value={effectiveReturn(options)}
             onChange={set("returnTo")}
-            options={[{ id: "none", label: "Nothing" }, { id: "website", label: "This page" }, { id: "email", label: "Email" }, { id: "phone", label: "Phone" }]}
+            options={
+              options.device === "qr"
+                ? [{ id: "none", label: "Nothing" }, { id: "phone", label: "Phone call" }]
+                : [
+                    { id: "none", label: "Nothing" },
+                    { id: "website", label: "This page" },
+                    { id: "inapp", label: "This page, in Yivi" },
+                    { id: "email", label: "Email" },
+                    { id: "phone", label: "Phone call" },
+                  ]
+            }
           />
         </Row>
       )}
@@ -247,6 +258,19 @@ function OptionsBar({
   )
 }
 
+// The return option that applies: a QR session only keeps a phone number.
+function effectiveReturn(options: SessionOptions): SessionOptions["returnTo"] {
+  return options.device === "qr" && options.returnTo !== "phone" ? "none" : options.returnTo
+}
+
+const RETURN_LABEL: Record<SessionOptions["returnTo"], string> = {
+  none: "",
+  website: "Back to this page",
+  inapp: "Back to this page, in Yivi",
+  email: "Back to email",
+  phone: "Then a phone call",
+}
+
 // The options in one line, for the Request column.
 function optionsSummary(variant: Variant, scenario: Scenario, options: SessionOptions, linkForm: LinkForm, formats: FormatChoice): string {
   const irma = variant === "irma"
@@ -258,7 +282,7 @@ function optionsSummary(variant: Variant, scenario: Scenario, options: SessionOp
     cards.length ? (vcdm === 0 ? "SD-JWT VC" : vcdm === cards.length ? "VCDM" : `${vcdm} of ${cards.length} VCDM`) : null,
     options.device === "same" ? "This phone" : "QR",
     irma && options.device === "qr" && options.pairing ? "Pairing code" : null,
-    irma && options.returnTo !== "none" ? `Back to ${{ website: "this page", email: "email", phone: "phone" }[options.returnTo]}` : null,
+    irma ? RETURN_LABEL[effectiveReturn(options)] || null : null,
     { scheme: "Custom scheme", universal: "Universal link", "universal-staging": "Universal link (staging)" }[linkForm],
   ]
     .filter(Boolean)
@@ -349,22 +373,22 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const { scenario, variant, onVariant, formats, onFormats, options, onOptions, linkForm, onLinkForm, onOpenInPlayground, onBackToList } = props
   // Marks this page in the return URL, so returning from Yivi (even in a new tab)
   // picks the session up again. A page that is itself such a return keeps its id.
-  const [resumeId] = useState(() => new URLSearchParams(window.location.search).get("resume") ?? Math.random().toString(36).slice(2, 10))
-  const [resumed] = useState(() => {
-    const record = takeResume(new URLSearchParams(window.location.search).get("resume"))
-    return record && record.scenario === scenario.id && record.variant === variant ? record : null
-  })
+  // A fresh id per page load; a page Yivi brought back reads its record once and
+  // then starts over with a new id for the next session.
+  const [returnedId] = useState(() => new URLSearchParams(window.location.search).get("resume"))
+  const [resumeId] = useState(newResumeId)
+  const resumeTaken = useRef(false)
   const generated = useMemo(() => requestBody(scenario, variant, formats, options, resumeId), [scenario, variant, formats, options, resumeId])
   // Below xl the three panels become tabs; Request comes first, since setup is
   // done once and the request every run.
-  const [tab, setTab] = useState<"request" | "setup" | "result">(resumed ? "result" : "request")
+  const [tab, setTab] = useState<"request" | "setup" | "result">(returnedId ? "result" : "request")
   const [setupTodo, setSetupTodo] = useState(0)
   const [edited, setEdited] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
   const [sheetQr, setSheetQr] = useState(false)
-  const [phase, setPhase] = useState<Phase>(resumed ? "running" : "ready")
+  const [phase, setPhase] = useState<Phase>(returnedId ? "running" : "ready")
   const [disclosure, setDisclosure] = useState<Disclosure | null>(null)
   const [result, setResult] = useState<DisclosureResult | null>(null)
   const [error, setError] = useState("")
@@ -389,7 +413,6 @@ export default function ScenarioPage(props: ScenarioPageProps) {
         const r = await d.poll()
         if (r) {
           stop()
-          forgetResume(resumeId)
           setResult(r)
           setPhase("done")
           setQrOpen(false)
@@ -405,7 +428,18 @@ export default function ScenarioPage(props: ScenarioPageProps) {
 
   // Back from Yivi with a session this phone started: fetch its result.
   useEffect(() => {
-    if (resumed) follow(resumeIrma(resumed.token))
+    // Once: the record can only be read once, and dev mode runs effects twice.
+    if (!returnedId || resumeTaken.current) return
+    resumeTaken.current = true
+    // The resume id has done its job: drop it from the address bar.
+    const url = new URL(window.location.href)
+    url.searchParams.delete("resume")
+    url.searchParams.delete("inapp")
+    window.history.replaceState(null, "", url)
+    takeResume(returnedId).then((record) => {
+      if (record && record.scenario === scenario.id && record.variant === variant) follow(resumeIrma(record.token))
+      else setPhase("ready")
+    })
     // Once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -425,7 +459,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
     try {
       const d = await startDisclosure(scenario, variant, body, options)
       if (d.token && body.includes(`resume=${resumeId}`)) {
-        saveResume(resumeId, { token: d.token, scenario: scenario.id, variant, at: Date.now() })
+        await saveResume(resumeId, { token: d.token, scenario: scenario.id, variant })
       }
       setDisclosure(d)
       setPhase("running")
@@ -456,13 +490,19 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const statusLabel = { ready: "", running: "Waiting", done: "Done", error: "Failed" }[phase]
   const sameDevice = options.device === "same"
   const showSessionQr = !sameDevice || sheetQr
-  const comesBack = variant === "irma" && options.returnTo === "website"
+  const comesBack = variant === "irma" && (options.returnTo === "website" || options.returnTo === "inapp")
+  // What happens after Yivi, as the app does it: it opens an IRMA return URL; for
+  // OpenID4VP, or without one, Android drops back to this browser and iPhone
+  // shows a back arrow to the status bar's "‹ Safari".
+  const backByItself = "On Android, Yivi drops you back here when done; on iPhone, tap “‹ Safari” in the top-left corner."
   const continueText =
-    variant === "dcql"
-      ? "The session is ready on this phone. Yivi opens and asks what to share. This verifier can’t send you back: switch back to this page when Yivi is done."
-      : comesBack
-        ? "The session is ready on this phone. Yivi opens, asks what to share, and brings you back to this page when you’re done."
-        : "The session is ready on this phone. Yivi opens and asks what to share; switch back to this page when you’re done."
+    variant === "irma" && comesBack
+      ? "Yivi opens, asks what to share, and brings you back to this page when you’re done."
+      : variant === "irma" && options.returnTo === "email"
+        ? "Yivi opens and asks what to share, then opens a new email. Switch back here for the result."
+        : variant === "irma" && options.returnTo === "phone"
+          ? "Yivi opens and asks what to share, then offers to make a call. Switch back here for the result."
+          : `Yivi opens and asks what to share. ${backByItself}`
   const tabs: { id: "request" | "setup" | "result"; label: string }[] = [
     { id: "request", label: "Request" },
     { id: "setup", label: setupTodo > 0 ? `Setup · ${setupTodo}` : "Setup" },

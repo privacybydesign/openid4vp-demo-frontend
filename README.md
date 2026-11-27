@@ -137,8 +137,16 @@ can and can't do, and why.
 On a phone the tool works on the same device as the wallet: the scenario list
 is the first screen, a scenario opens on its Request tab (Setup shows how many
 cards are still to issue), sessions start on this phone with an Open Yivi sheet,
-and IRMA sessions return to the page. The return URL carries a resume id, so the
-result is picked up again even if the browser opens it in a new tab.
+and IRMA sessions return to the page (or open it in Yivi's own browser). The
+return URL carries a random resume id; the session token is kept under that id
+on the tool's server (`/api/resume`, in memory, read once, 30 minutes), so the
+result is picked up in whatever browser Yivi opens. Chained sessions pass the
+return URL on to the next session. A QR session only takes a `tel:` return URL,
+since the app ignores the others on another device.
+
+OpenID4VP sessions don't return yet: the app doesn't follow a verifier's
+`redirect_uri`. On Android it drops back to the browser by itself; on iPhone you
+tap "‹ Safari".
 
 All raw JSON is shown through `JsonView`, so it is always highlighted; ESLint
 rejects `JSON.stringify` inside JSX.
