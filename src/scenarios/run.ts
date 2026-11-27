@@ -6,6 +6,7 @@ import compactJson from "../compactJson"
 import { IRMA_SERVER_URL, startIrmaSession, irmaWalletLink, pollIrmaSession } from "../irma"
 import { preAuthGrant, startEudiIssuerSession } from "../issuers"
 import { describePresentation, eudiRequest, parseIrmaResult, presentationsOf } from "../verifiers"
+import { dcApiRequestData, requestViaDcApi } from "../dcApi"
 
 // Running what scenarios describe: issuing one card instance from a source, and
 // starting a scenario's disclosure with the session options applied.
@@ -164,6 +165,9 @@ export interface SessionOptions {
   // "inapp": this page, opened in Yivi's own browser instead of the normal one.
   returnTo: "none" | "website" | "inapp" | "email" | "phone"
   prefix: "did:jwk" | "did:web"
+  // DCQL only: a wallet link (QR or Open Yivi) to the scenario's verifier, or the
+  // W3C Digital Credentials API straight from this page.
+  transport: "link" | "dcapi"
 }
 
 export const DEFAULT_OPTIONS: SessionOptions = {
@@ -172,6 +176,7 @@ export const DEFAULT_OPTIONS: SessionOptions = {
   pairing: false,
   returnTo: "none",
   prefix: "did:jwk",
+  transport: "link",
 }
 
 // On a phone the wallet is on this device: start the session here, and have Yivi
@@ -291,6 +296,7 @@ export function requestBody(
   }
   const dcql = scenario.dcql!
   const query = dcql.query(formats)
+  if (options.transport === "dcapi") return compactJson(dcApiRequestData(query))
   return compactJson(dcql.source === "veramo" ? { dcql: query } : eudiRequest(query))
 }
 
@@ -416,6 +422,29 @@ async function startVeramoVerifier(body: string, prefix: SessionOptions["prefix"
   }
 }
 
+// The DC API call has to start within the click that started the session, so it
+// starts here, synchronously; the poll then reports its outcome.
+function startDcApi(body: string): Disclosure {
+  let outcome: { result?: DisclosureResult; error?: unknown } | null = null
+  requestViaDcApi(JSON.parse(body)).then(
+    (raw) => {
+      const groups = Object.entries(raw.vp_token ?? {}).flatMap(([id, entry]) => presentationsOf(entry).map((p) => describePresentation(id, p)))
+      outcome = { result: { groups, raw } }
+    },
+    (error) => {
+      outcome = { error }
+    }
+  )
+  return {
+    walletLink: "",
+    poll: async () => {
+      if (!outcome) return null
+      if (outcome.error) throw outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error))
+      return outcome.result!
+    },
+  }
+}
+
 export async function startDisclosure(
   scenario: Scenario,
   variant: "irma" | "dcql",
@@ -423,5 +452,6 @@ export async function startDisclosure(
   options: SessionOptions
 ): Promise<Disclosure> {
   if (variant === "irma") return startIrma(body, options)
+  if (options.transport === "dcapi") return startDcApi(body)
   return scenario.dcql!.source === "veramo" ? startVeramoVerifier(body, options.prefix) : startEudiVerifier(body)
 }

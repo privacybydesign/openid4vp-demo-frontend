@@ -37,6 +37,7 @@ export function readUrl(search = window.location.search): UrlState {
     pairing: p.get("pairing") === "on",
     returnTo: (["none", "website", "inapp", "email", "phone"] as const).find((r) => r === p.get("return")) ?? defaults.returnTo,
     prefix: p.get("prefix") === "did:web" ? "did:web" : defaults.prefix,
+    transport: p.get("via") === "dcapi" ? "dcapi" : defaults.transport,
   }
   const formats: FormatChoice = {}
   for (const pair of (p.get("fmt") ?? "").split(",").filter(Boolean)) {
@@ -73,6 +74,7 @@ export function writeUrl(state: UrlState, push: boolean) {
   if (o.pairing) p.set("pairing", "on")
   if (o.returnTo !== defaults.returnTo) p.set("return", o.returnTo)
   if (o.prefix !== defaults.prefix) p.set("prefix", o.prefix)
+  if (o.transport !== defaults.transport) p.set("via", o.transport)
   if (state.linkForm !== "scheme") p.set("link", state.linkForm)
   const url = `?${p}`
   if (url === window.location.search) return

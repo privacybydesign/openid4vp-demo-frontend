@@ -144,6 +144,13 @@ result is picked up in whatever browser Yivi opens. Chained sessions pass the
 return URL on to the next session. A QR session only takes a `tel:` return URL,
 since the app ignores the others on another device.
 
+A DCQL scenario can also be sent through the W3C Digital Credentials API
+(Session options → Sent via): the page asks Yivi itself with an unsigned
+OpenID4VP request (`openid4vp-v1-unsigned`) and reads the response; no verifier
+is involved and nothing checks signatures. It needs Chrome on Android (or a
+desktop Chrome paired with one) and a Yivi build that registers as a Credential
+Manager provider, which only offers SD-JWT VC and mdoc, not VCDM.
+
 OpenID4VP sessions don't return yet: the app doesn't follow a verifier's
 `redirect_uri`. On Android it drops back to the browser by itself; on iPhone you
 tap "‹ Safari".

@@ -15,6 +15,7 @@ import { DisclosureTable } from "./WalletResponseView"
 import { applyLinkForm, stampSecondDeviceForQr } from "./walletLink"
 import type { LinkForm } from "./walletLink"
 import { hostForLinkForm } from "./linkHost"
+import { dcApiAvailable } from "./dcApi"
 import { Hint, Panel, Segmented, SmallButton, SubHeading, Tag } from "./ui"
 
 interface ScenarioPageProps {
@@ -196,9 +197,27 @@ function OptionsBar({
   const set = <K extends keyof SessionOptions>(key: K) => (value: SessionOptions[K]) => onOptions({ ...options, [key]: value })
   const irma = variant === "irma"
   const isIssuance = irma && String((scenario.irma!.request as Record<string, unknown>)["@context"]).includes("/issuance/")
-  const veramo = variant === "dcql" && scenario.dcql!.source === "veramo"
+  const dcApi = variant === "dcql" && options.transport === "dcapi"
+  const veramo = variant === "dcql" && scenario.dcql!.source === "veramo" && !dcApi
   return (
     <div className="flex flex-col gap-3">
+      {variant === "dcql" && (
+        <Row label="Sent via">
+          <Segmented
+            label="Sent via"
+            disabled={disabled}
+            value={options.transport}
+            onChange={set("transport")}
+            options={[{ id: "link", label: `${scenario.dcql!.source === "veramo" ? "Veramo" : "EUDI"} verifier` }, { id: "dcapi", label: "Digital Credentials API" }]}
+          />
+        </Row>
+      )}
+      {dcApi && (
+        <Hint>
+          This page asks Yivi itself, with an unsigned OpenID4VP request; Yivi shows it by its origin and nothing checks the response's signatures. Yivi only offers SD-JWT VC and mdoc this way, not VCDM.
+          {!dcApiAvailable() && " This browser has no Digital Credentials API: use Chrome on Android, or a desktop Chrome paired with one."}
+        </Hint>
+      )}
       {irma && !isIssuance && (
         <Row label="Session type">
           <Segmented label="Session type" disabled={disabled} value={options.kind} onChange={set("kind")} options={[{ id: "disclose", label: "Disclose" }, { id: "sign", label: "Sign a message" }]} />
@@ -209,9 +228,11 @@ function OptionsBar({
           <Segmented label="Verifier identifier" disabled={disabled} value={options.prefix} onChange={set("prefix")} options={[{ id: "did:jwk", label: "did:jwk" }, { id: "did:web", label: "did:web" }]} />
         </Row>
       )}
-      <Row label="Started on">
-        <Segmented label="Started on" disabled={disabled} value={options.device} onChange={set("device")} options={[{ id: "qr", label: "Other device (QR)" }, { id: "same", label: "This phone" }]} />
-      </Row>
+      {!dcApi && (
+        <Row label="Started on">
+          <Segmented label="Started on" disabled={disabled} value={options.device} onChange={set("device")} options={[{ id: "qr", label: "Other device (QR)" }, { id: "same", label: "This phone" }]} />
+        </Row>
+      )}
       {irma && options.device === "qr" && (
         <Row label="Pairing code">
           <Segmented
@@ -245,15 +266,17 @@ function OptionsBar({
           />
         </Row>
       )}
-      <Row label="Wallet link">
-        <Segmented
-          label="Wallet link"
-          disabled={disabled}
-          value={linkForm}
-          onChange={onLinkForm}
-          options={[{ id: "scheme", label: "Custom scheme" }, { id: "universal", label: "Universal" }, { id: "universal-staging", label: "Universal (staging)" }]}
-        />
-      </Row>
+      {!dcApi && (
+        <Row label="Wallet link">
+          <Segmented
+            label="Wallet link"
+            disabled={disabled}
+            value={linkForm}
+            onChange={onLinkForm}
+            options={[{ id: "scheme", label: "Custom scheme" }, { id: "universal", label: "Universal" }, { id: "universal-staging", label: "Universal (staging)" }]}
+          />
+        </Row>
+      )}
     </div>
   )
 }
@@ -274,8 +297,10 @@ const RETURN_LABEL: Record<SessionOptions["returnTo"], string> = {
 // The options in one line, for the Request column.
 function optionsSummary(variant: Variant, scenario: Scenario, options: SessionOptions, linkForm: LinkForm, formats: FormatChoice): string {
   const irma = variant === "irma"
+  const dcApi = variant === "dcql" && options.transport === "dcapi"
   const cards = variant === "dcql" ? veramoCards(scenario) : []
   const vcdm = cards.filter((c) => formats[c] === "vcdm").length
+  if (dcApi) return ["Digital Credentials API", cards.length ? (vcdm === 0 ? "SD-JWT VC" : `${vcdm} VCDM (not offered)`) : null].filter(Boolean).join(" · ")
   return [
     irma && options.kind === "sign" ? "Sign" : null,
     variant === "dcql" && scenario.dcql!.source === "veramo" ? options.prefix : null,
