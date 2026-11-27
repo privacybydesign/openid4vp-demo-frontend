@@ -32,6 +32,9 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       allowedHosts: true,
+      // Set by compose.dev.yml: inside a container, file events from the host
+      // can go missing, so poll for changes instead.
+      watch: process.env.DEV_WATCH_POLLING ? { usePolling: true, interval: 300 } : undefined,
     },
     plugins: [
       react(),

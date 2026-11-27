@@ -26,7 +26,7 @@ jobs:
       contents: read
     with:
       node-version: "22" # same major as node:22-alpine in the Dockerfile
-      scripts: lint build # eslint, tsc -b + vite build (there is no test script)
+      scripts: lint test build # eslint, vitest (scenario data checks), tsc -b + vite build
       ignore-scripts: true
 
   # Builds and scans the image without pushing it; Delivery pushes from main.

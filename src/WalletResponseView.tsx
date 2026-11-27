@@ -13,7 +13,7 @@ interface DisclosureTableProps {
   keyPrefix: string
 }
 
-function DisclosureTable({ rows, keyPrefix }: DisclosureTableProps) {
+export function DisclosureTable({ rows, keyPrefix }: DisclosureTableProps) {
   return (
     <table className="w-full text-sm">
       <thead>

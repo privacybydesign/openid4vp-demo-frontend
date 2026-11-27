@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { EditorView, basicSetup } from 'codemirror'
-import { json } from '@codemirror/lang-json'
-import { catppuccinLatte } from '@catppuccin/codemirror'
-import { EditorState } from '@codemirror/state'
+import { useMemo, useState } from 'react'
+import JsonEditor from './JsonEditor'
+import JsonView from './JsonView'
 import pbdfCredentials from './pbdfCredentials.json'
 import ErrorView from './ErrorView'
 import WalletResponseView from './WalletResponseView'
@@ -90,60 +88,6 @@ function defaultAttributeIds(credential: CredentialType): string[] {
   return credential.attributes.slice(0, 1).map((attribute) => attribute.id)
 }
 
-interface JsonEditorProps {
-  value: string
-  onChange: (value: string) => void
-}
-
-// Controlled, unlike RequestEditor: picking a credential rewrites the text
-// while the editor stays mounted.
-function JsonEditor({ value, onChange }: JsonEditorProps) {
-  const hostRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<EditorView | null>(null)
-  const onChangeRef = useRef(onChange)
-
-  useEffect(() => {
-    onChangeRef.current = onChange
-  })
-
-  useEffect(() => {
-    const view = new EditorView({
-      state: EditorState.create({
-        extensions: [
-          basicSetup,
-          json(),
-          catppuccinLatte,
-          EditorView.lineWrapping,
-          EditorView.theme({
-            '&': { fontSize: '14px' },
-            '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' },
-          }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current(update.state.doc.toString())
-          }),
-        ],
-      }),
-      parent: hostRef.current!,
-    })
-    viewRef.current = view
-
-    return () => view.destroy()
-  }, [])
-
-  useEffect(() => {
-    const view = viewRef.current
-    if (!view || view.state.doc.toString() === value) return
-
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
-  }, [value])
-
-  return (
-    <div
-      ref={hostRef}
-      className="h-[400px] overflow-auto rounded-lg border border-[#CFE4EF] bg-white"
-    />
-  )
-}
 
 function DigitalCredentialsDemo() {
   const initialCredential =
@@ -317,7 +261,7 @@ function DigitalCredentialsDemo() {
             <p className="text-[15px] font-semibold text-[#484747]">
               OpenID4VP request, sent as <code>{PROTOCOL}</code>:
             </p>
-            <JsonEditor value={requestData} onChange={setRequestData} />
+            <JsonEditor value={requestData} onChange={setRequestData} minHeight="400px" />
           </>
         )}
 
@@ -335,9 +279,7 @@ function DigitalCredentialsDemo() {
               Shown as received: this page does not verify the presentation.
             </p>
             <h3 className="text-[15px] font-semibold text-[#484747]">Raw response</h3>
-            <pre className="p-4 rounded-lg border border-[#CFE4EF] bg-white text-sm whitespace-pre-wrap break-all">
-              {JSON.stringify(responseData, null, 2)}
-            </pre>
+            <JsonView value={responseData} label="raw response" />
           </>
         )}
 

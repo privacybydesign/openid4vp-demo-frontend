@@ -17,6 +17,8 @@ export const IRMA_SERVER_URL = import.meta.env.VITE_IRMA_SERVER_URL || "https://
 export interface IrmaSessionResponse {
   sessionPtr: SessionPtr
   token: string
+  // Lets a frontend set session options such as pairing. See frontendOptions below.
+  frontendRequest?: { authorization: string; pairingHint?: boolean }
 }
 
 // Starts a session directly against the IRMA server — the same endpoint the yivi

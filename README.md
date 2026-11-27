@@ -1,7 +1,9 @@
 # openid4vp-demo-frontend
 
 A small Vite + React tool for exercising the Yivi verifier and Veramo
-verifier/issuer flows (IRMA, EUDI, Veramo Verifier, Veramo Issuer tabs).
+verifier/issuer flows. It is organised around **scenarios**: 43 of the 44 cases of the
+wallet prototype, each with the wallet setup it needs and a native request per
+protocol. The old per-implementation tabs live on as the **Playground**.
 
 ## Architecture
 
@@ -19,6 +21,9 @@ credential-free, same-origin routes to the SPA:
 | `GET  /api/didweb-verifier/offer/:state` | `…/{verifier}/api/check-offer/{state}` |
 | `POST /api/issuer/:key/offer`       | `…/{issuer}/api/create-offer`             |
 | `POST /api/issuer/:key/offer/check` | `…/{issuer}/api/check-offer`              |
+| `POST /api/issuer/:key/credentials` | `…/{issuer}/api/list-credentials`         |
+| `POST /api/issuer/:key/revoke`      | `…/{issuer}/api/revoke-credential`        |
+| `POST /api/irma/next-session/:name` | (served here: an allow-listed IRMA next-session request) |
 
 `:key` is an allow-listed issuer key (`pre-auth` \| `authcode`) mapped to a real
 issuer name server-side. The same proxy is mounted on the Vite dev server (via
@@ -47,6 +52,16 @@ docker compose up --build
 
 `docker-compose.yml` injects the config through `entry-point.sh`, which builds
 the SPA and serves it behind the BFF (`npm start`). Open http://localhost:8080/.
+That builds once and serves the result like production, so edits don't show up
+until a restart. To develop in Docker with live reload instead, run the dev
+server in the container:
+
+```sh
+docker compose -f compose.dev.yml up --build
+```
+
+Open http://localhost:5173/. It mounts the source, polls it for changes and
+reads the same `.env`.
 
 ## Configuration
 
@@ -97,9 +112,56 @@ scripts/generate-pbdf-credentials.py path/to/irma_configuration/pbdf
 It needs Chrome 128+ on Android with `chrome://flags/#digital-credentials`
 enabled, the Yivi app with Digital Credentials support, and HTTPS (or localhost).
 
-## Build / lint
+## Scenarios
+
+The sidebar lists the wallet prototype's scenarios, grouped as on the prototype
+canvas. A scenario page has three columns:
+
+- **Wallet setup**: what has to be in the wallet *Before* the session, what the
+  wallet adds *During* it, and what it *must not contain*. Every card can be
+  issued from its row; rows that need a revoked or expiring card do that step
+  right after issuing.
+- **Request**: the exact body that is POSTed, highlighted (or editable), the
+  per-card Veramo format (SD-JWT VC or VCDM) and the session options.
+- **Result**: one table per disclosed credential, the raw response, the expected
+  disclosure and a Look-for checklist.
+
+A variant exists only where its protocol expresses the scenario natively. Where
+the cards come from is decided per variant: irma-demo for IRMA, pbdf-staging on
+the EUDI verifier when the wallet has to add cards mid-session, Veramo when the
+values matter, and the EUDI issuer for the real PID and mdocs. The scenarios live
+in `src/scenarios/`; the card catalogue (`cards.ts`) maps each abstract card onto
+each source. **Coverage** (generated from that data) shows what every scenario
+can and can't do, and why.
+
+On a phone the tool works on the same device as the wallet: the scenario list
+is the first screen, a scenario opens on its Request tab (Setup shows how many
+cards are still to issue), sessions start on this phone with an Open Yivi sheet,
+and IRMA sessions return to the page (or open it in Yivi's own browser). The
+return URL carries a random resume id; the session token is kept under that id
+on the tool's server (`/api/resume`, in memory, read once, 30 minutes), so the
+result is picked up in whatever browser Yivi opens. Chained sessions pass the
+return URL on to the next session. A QR session only takes a `tel:` return URL,
+since the app ignores the others on another device.
+
+A DCQL scenario can also be sent through the W3C Digital Credentials API
+(Session options → Sent via): the page asks Yivi itself with an unsigned
+OpenID4VP request (`openid4vp-v1-unsigned`) and reads the response; no verifier
+is involved and nothing checks signatures. It needs Chrome on Android (or a
+desktop Chrome paired with one) and a Yivi build that registers as a Credential
+Manager provider, which only offers SD-JWT VC and mdoc, not VCDM.
+
+OpenID4VP sessions don't return yet: the app doesn't follow a verifier's
+`redirect_uri`. On Android it drops back to the browser by itself; on iPhone you
+tap "‹ Safari".
+
+All raw JSON is shown through `JsonView`, so it is always highlighted; ESLint
+rejects `JSON.stringify` inside JSX.
+
+## Build / lint / test
 
 ```sh
 npm run build   # tsc -b && vite build
 npm run lint
+npm test        # scenario data consistency checks (vitest)
 ```
