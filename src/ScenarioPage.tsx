@@ -17,8 +17,6 @@ import { hostForLinkForm } from "./linkHost"
 import { Hint, Panel, Segmented, SmallButton, SubHeading, Tag } from "./ui"
 import { STATUS_LABEL, STATUS_TONE } from "./status"
 
-const PROTOTYPE_URL = "https://claude.ai/artifact/VaATGc5fi2T1B38mBoUr2j"
-
 interface ScenarioPageProps {
   scenario: Scenario
   variant: Variant
@@ -410,14 +408,6 @@ export default function ScenarioPage(props: ScenarioPageProps) {
               { id: "dcql", label: scenario.dcql ? `DCQL · ${scenario.dcql.source === "veramo" ? "Veramo" : "EUDI"} verifier` : "DCQL", disabled: !scenario.dcql },
             ]}
           />
-          <a
-            href={`${PROTOTYPE_URL}#artboard-${scenario.prototypeFrame}`}
-            target="_blank"
-            rel="noreferrer"
-            className="min-h-9 inline-flex items-center px-3 rounded-md border border-[#484747] text-[13.5px] font-semibold text-[#484747] no-underline hover:bg-[#eae5e2]"
-          >
-            Wallet prototype
-          </a>
         </div>
       </header>
 
