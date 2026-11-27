@@ -1,19 +1,18 @@
 import { useEffect, useRef } from "react"
-import JsonView from "./JsonView"
 import JsonEditor from "./JsonEditor"
 
 interface RequestDialogProps {
   open: boolean
   title: string
   value: string
-  editing: boolean
   onChange: (value: string) => void
   onClose: () => void
 }
 
-// A request shown (almost) full screen. A native modal <dialog>: Escape closes
-// it, focus stays inside, and the page behind is inert.
-export default function RequestDialog({ open, title, value, editing, onChange, onClose }: RequestDialogProps) {
+// A request shown (almost) full screen, highlighted and editable in one. A
+// native modal <dialog>: Escape closes it, focus stays inside, and the page behind
+// is inert.
+export default function RequestDialog({ open, title, value, onChange, onClose }: RequestDialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -37,17 +36,13 @@ export default function RequestDialog({ open, title, value, editing, onChange, o
               {title}
             </h2>
             <button type="button" className="btn-secondary py-1.5 px-4 text-sm" onClick={onClose}>
-              {editing ? "Done" : "Close"}
+              Close
             </button>
           </div>
           <div className="flex-1 min-h-0 p-4">
-            {editing ? (
-              <div className="h-full [&>div]:h-full">
-                <JsonEditor value={value} onChange={onChange} minHeight="100%" />
-              </div>
-            ) : (
-              <JsonView value={value} maxHeight="calc(94vh - 7rem)" label="request" />
-            )}
+            <div className="h-full [&>div]:h-full">
+              <JsonEditor value={value} onChange={onChange} minHeight="100%" />
+            </div>
           </div>
         </div>
       )}

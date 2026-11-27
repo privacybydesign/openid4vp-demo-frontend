@@ -314,7 +314,7 @@ export default function ScenarioPage(props: ScenarioPageProps) {
   const { scenario, variant, onVariant, formats, onFormats, options, onOptions, linkForm, onLinkForm, onOpenInPlayground } = props
   const generated = useMemo(() => requestBody(scenario, variant, formats, options), [scenario, variant, formats, options])
   const [edited, setEdited] = useState<string | null>(null)
-  const [dialog, setDialog] = useState<"view" | "edit" | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [phase, setPhase] = useState<Phase>("ready")
   const [disclosure, setDisclosure] = useState<Disclosure | null>(null)
   const [result, setResult] = useState<DisclosureResult | null>(null)
@@ -448,20 +448,14 @@ export default function ScenarioPage(props: ScenarioPageProps) {
                 <span className="text-[14px] font-semibold text-[#484747]">{summary.title}</span>
                 <span className="text-[13px] text-[#6b6969]">{summary.detail}</span>
               </div>
-              <div className="flex gap-1">
-                <SmallButton onClick={() => setDialog("view")}>View</SmallButton>
-                <SmallButton variant="ghost" disabled={running} onClick={() => setDialog("edit")}>
-                  Edit
-                </SmallButton>
-              </div>
+              <SmallButton onClick={() => setDialogOpen(true)}>Open request</SmallButton>
             </div>
             <RequestDialog
-              open={dialog !== null}
+              open={dialogOpen}
               title={`${scenario.title} · ${variant === "irma" ? "IRMA request" : "DCQL request"}`}
               value={body}
-              editing={dialog === "edit"}
               onChange={setEdited}
-              onClose={() => setDialog(null)}
+              onClose={() => setDialogOpen(false)}
             />
             <div className="flex flex-wrap gap-1">
               {edited !== null && (
