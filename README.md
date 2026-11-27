@@ -52,6 +52,16 @@ docker compose up --build
 
 `docker-compose.yml` injects the config through `entry-point.sh`, which builds
 the SPA and serves it behind the BFF (`npm start`). Open http://localhost:8080/.
+That builds once and serves the result like production, so edits don't show up
+until a restart. To develop in Docker with live reload instead, run the dev
+server in the container:
+
+```sh
+docker compose -f compose.dev.yml up --build
+```
+
+Open http://localhost:5173/. It mounts the source, polls it for changes and
+reads the same `.env`.
 
 ## Configuration
 

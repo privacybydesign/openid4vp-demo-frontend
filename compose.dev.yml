@@ -1,0 +1,22 @@
+# Development: the Vite dev server inside the container, reloading on every save.
+#
+#   docker compose -f compose.dev.yml up --build
+#
+# Open http://localhost:5173/. Unlike docker-compose.yml, which builds once and
+# serves the result like production, this mounts the source and watches it. The
+# dev server mounts the same BFF /api routes (vite.config.ts) and reads `.env`
+# from the mounted folder, so the admin tokens stay server-side here too.
+services:
+  frontend_dev:
+    build: .
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173", "--strictPort"]
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./:/app
+      # Keep the image's node_modules (installed for Linux) instead of the host's.
+      - /app/node_modules
+    environment:
+      # File events from a macOS/Windows host don't always reach a container, so
+      # poll for changes instead of waiting for events that may never come.
+      - DEV_WATCH_POLLING=1
