@@ -82,15 +82,6 @@ export default function App() {
       <header className="bg-white border-b border-[#CFE4EF] flex items-center px-4 py-3 gap-4 shrink-0">
         <img src="/yivi-logo.svg" alt="Yivi" className="h-9" />
         <h1 className="text-lg font-bold text-[#484747] m-0">Session Tool</h1>
-        <button
-          type="button"
-          className="ml-auto md:hidden min-h-9 px-3 rounded-md border border-[#484747] bg-white text-sm font-semibold text-[#484747]"
-          aria-expanded={menuOpen}
-          aria-controls="scenario-sidebar"
-          onClick={() => setMenuOpen((o) => !o)}
-        >
-          {menuOpen ? "Close" : "Scenarios"}
-        </button>
       </header>
       <div className="flex-1 min-h-0 flex flex-col md:flex-row">
         <aside
@@ -115,6 +106,15 @@ export default function App() {
               onOpenInPlayground={openInPlayground}
               onBackToList={() => setMenuOpen(true)}
             />
+          )}
+          {route.view !== "scenario" && (
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="md:hidden self-start shrink-0 min-h-10 p-0 mb-2 bg-transparent border-0 text-[15px] font-semibold text-[#00508a] cursor-pointer"
+            >
+              ‹ Scenarios
+            </button>
           )}
           {route.view === "coverage" && <CoveragePage onNavigate={navigate} />}
           {route.view === "cards" && <CardCatalogue linkForm={linkForm} onLinkForm={setLinkForm} device={options.device} />}
