@@ -63,15 +63,7 @@ export default function CoveragePage({ onNavigate }: { onNavigate: (r: Route) =>
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-1 max-w-3xl">
-        <span className="text-[12px] font-semibold uppercase tracking-wide text-[#6b6969]">Coverage</span>
-        <h1 className="text-2xl font-bold text-[#484747] m-0">Every prototype scenario, per protocol</h1>
-        <p className="text-[14px] leading-[22px] text-[#5f5d5d] m-0">
-          A variant exists only where the protocol expresses the scenario natively. Flagged: the DCQL variant issues its
-          “During” cards up front, because the wallet can't add OpenID4VCI cards mid-session, so it tests choosing rather
-          than adding. Check: something on staging or in the setup still has to be confirmed or done by hand.
-        </p>
-      </header>
+      <h1 className="text-2xl font-bold text-[#484747] m-0">Coverage</h1>
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="bg-white rounded-lg border border-[#E6E1DD] p-4">
